@@ -77,17 +77,24 @@ supabase.auth.sign_in_with_otp({
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Verify & Login"):
-                    try:
-                        # Find the family record associated with the validated email
-                        family_lookup = supabase.table("families").select("family_id").eq("email_id", st.session_state.auth_email).execute()
-                        if family_lookup.data:
-                            st.session_state.family_id = family_lookup.data[0]["family_id"]
-                            st.session_state.logged_in = True
-                            st.success("Login Successful!")
-                            st.rerun()
-                    except Exception as e:
-                        st.error("Authentication check failed. Please check your token or try again.")
+               if st.button("Verify & Login"):
+                try:
+                    # Officially verify the 6-digit token code with Supabase
+                    auth_response = supabase.auth.verify_otp({
+                        "email": st.session_state.auth_email,
+                        "token": otp_token,
+                        "type": "email"  # This tells it to check the email token queue
+                    })
+                    
+                    # If verification succeeds, load their family profile
+                    family_lookup = supabase.table("families").select("family_id").eq("email_id", st.session_state.auth_email).execute()
+                    if family_lookup.data:
+                        st.session_state.family_id = family_lookup.data[0]["family_id"]
+                        st.session_state.logged_in = True
+                        st.success("Login Successful!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Invalid OTP Code or Code Expired. Details: {str(e)}")
             with col2:
                 if st.button("← Cancel / Change Email"):
                     st.session_state.otp_sent = False
