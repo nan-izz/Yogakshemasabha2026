@@ -50,8 +50,13 @@ if not st.session_state.logged_in:
                     if check_db.data and len(check_db.data) > 0:
                         try:
                             # Send OTP via Supabase
-                            supabase.auth.sign_in_with_otp({"email": input_email})
-                            st.session_state.auth_email = input_email
+# New code forcing a token/numeric OTP
+supabase.auth.sign_in_with_otp({
+    "email": input_email,
+    "options": {
+        "should_create_user": False  # Prevents random people from signing up if they aren't in your Excel table
+    }
+})                            st.session_state.auth_email = input_email
                             st.session_state.otp_sent = True
                             st.success(f"A 6-digit verification code has been sent to {input_email}")
                             st.rerun()
