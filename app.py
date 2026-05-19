@@ -7,9 +7,8 @@ import io
 
 # --- SETUP SUPABASE ---
 # These secrets will be stored securely on the hosting server
-url = "https://oommuvndvdvcawjggcia.supabase.co"
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vbW11dm5kdmR2Y2F3amdnY2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMjA5ODQsImV4cCI6MjA5NDY5Njk4NH0.Crh6syzIO3z74MjDD4TD0ls8Fh6_3Ku5BIsRWcXkMBw"
-
+url = os.environ.get("SUPABASE_URL") or st.secrets["SUPABASE_URL"]
+key = os.environ.get("SUPABASE_KEY") or st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
 # --- SESSION STATE MANAGEMENT ---
