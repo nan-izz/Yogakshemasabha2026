@@ -37,7 +37,7 @@ if not st.session_state.logged_in:
                 st.error("Please enter your email address.")
             else:
                 # Search database for this exact email
-                response = supabase.table("families").select("id, head_of_family").eq("email_id", input_email).execute()
+                response = supabase.table("families").select("family_id, head_of_family").eq("email_id", input_email).execute()
                 
                 if response.data and len(response.data) > 0:
                     st.session_state.logged_in = True
