@@ -41,7 +41,7 @@ if not st.session_state.logged_in:
                 
                 if response.data and len(response.data) > 0:
                     st.session_state.logged_in = True
-                    st.session_state.family_id = response.data[0]["id"]
+                    st.session_state.family_id = response.data[0]["family_id"]
                     st.success(f"Welcome back, {response.data[0]['head_of_family']}!")
                     st.rerun()
                 else:
@@ -63,7 +63,7 @@ if not st.session_state.logged_in:
                 st.error("Please fill in both fields.")
             else:
                 # Look up the profile matching the credentials
-                response = supabase.table("families").select("id, head_of_family, email_id").ilike("head_of_family", f"%{input_head}%").ilike("illam_name", f"%{input_illam}%").execute()
+                response = supabase.table("families").select("family_id, head_of_family, email_id").ilike("head_of_family", f"%{input_head}%").ilike("illam_name", f"%{input_illam}%").execute()
                 
                 if response.data and len(response.data) > 0:
                     found_family = response.data[0]
@@ -75,7 +75,7 @@ if not st.session_state.logged_in:
                     else:
                         # Allow entry since email_id is missing/blank
                         st.session_state.logged_in = True
-                        st.session_state.family_id = found_family["id"]
+                        st.session_state.family_id = found_family["family_id"]
                         st.success(f"Verified successfully! Welcome, {found_family['head_of_family']}.")
                         st.rerun()
                 else:
@@ -98,7 +98,7 @@ else:
     st.title("Yogakshemasabha Member Portal")
     
     # Fetch the family data
-    family_data = supabase.table("families").select("*").eq("id", f_id).execute().data[0]
+    family_data = supabase.table("families").select("*").eq("family_id", f_id).execute().data[0]
     
     st.subheader("Your Household Information")
     st.write(f"**Head of Family:** {family_data['head_of_family']}")
@@ -119,7 +119,7 @@ else:
                 else:
                     try:
                         # Update the email_id column in Supabase
-                        supabase.table("families").update({"email_id": new_email}).eq("id", f_id).execute()
+                        supabase.table("families").update({"email_id": new_email}).eq("family_id", f_id).execute()
                         st.success("Email address successfully linked! From now on, you must use this email to log in.")
                         st.rerun()
                     except Exception as e:
