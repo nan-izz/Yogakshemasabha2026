@@ -8,7 +8,7 @@ import io
 # --- SETUP SUPABASE ---
 # These secrets will be stored securely on the hosting server
 url = "https://oommuvndvdvcawjggcia.supabase.co"
-key = "sb_publishable_j1qlCsBzk3nt0_7if-eZ1g_4OH_4hWn"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vbW11dm5kdmR2Y2F3amdnY2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMjA5ODQsImV4cCI6MjA5NDY5Njk4NH0.Crh6syzIO3z74MjDD4TD0ls8Fh6_3Ku5BIsRWcXkMBw"
 
 supabase: Client = create_client(url, key)
 
