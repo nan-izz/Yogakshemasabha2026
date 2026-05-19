@@ -1,12 +1,14 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
+import os
+
 import io
 
 # --- SETUP SUPABASE ---
 # These secrets will be stored securely on the hosting server
-url: str = st.secrets["SUPABASE_URL"]
-key: str = st.secrets["SUPABASE_KEY"]
+url = os.environ.get("SUPABASE_URL") or st.secrets["SUPABASE_URL"]
+key = os.environ.get("SUPABASE_KEY") or st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
 # --- SESSION STATE MANAGEMENT ---
