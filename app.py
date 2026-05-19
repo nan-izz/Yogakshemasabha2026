@@ -1,144 +1,145 @@
 import streamlit as st
-import pandas as pd
-from supabase import create_client, Client
 import os
+from supabase import create_client, Client
 
-import io
-
-# --- SETUP SUPABASE ---
-# These secrets will be stored securely on the hosting server
-url = os.environ.get("SUPABASE_URL") or st.secrets["SUPABASE_URL"]
-key = os.environ.get("SUPABASE_KEY") or st.secrets["SUPABASE_KEY"]
+# Initialize Supabase Client
+url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
-# --- SESSION STATE MANAGEMENT ---
-if "role" not in st.session_state:
-    st.session_state.role = None
-if "user_phone" not in st.session_state:
-    st.session_state.user_phone = None
-if "otp_sent" not in st.session_state:
-    st.session_state.otp_sent = False
+# Initialize Session State
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "family_id" not in st.session_state:
+    st.session_state.family_id = None
+if "login_mode" not in st.session_state:
+    st.session_state.login_mode = "email"  # Toggle between 'email' and 'backdoor'
 
-st.title("Community Data Portal")
+# ---- LOGOUT FUNCTIONALITY ----
+def logout():
+    st.session_state.logged_in = False
+    st.session_state.family_id = None
+    st.session_state.login_mode = "email"
+    st.rerun()
 
-# --- LOGIN SCREEN ---
-if st.session_state.role is None:
-    tab1, tab2 = st.tabs(["User Login (OTP)", "Admin Login"])
 
-    # USER LOGIN
-    with tab1:
-        st.subheader("Login with your Mobile Number")
-        phone = st.text_input("Mobile Number (Include country code, e.g., +91)")
+# ---- 1. LANDING PAGE / LOGIN MODES ----
+if not st.session_state.logged_in:
+    st.title("Yogakshemasabha Portal")
 
-        if not st.session_state.otp_sent:
-            if st.button("Send OTP"):
-                if phone:
+    # MODE A: PRIMARY EMAIL LOGIN
+    if st.session_state.login_mode == "email":
+        st.subheader("Login with your registered Household Email")
+        input_email = st.text_input("Family Email Address").strip().lower()
+        
+        if st.button("Log In with Email"):
+            if input_email == "":
+                st.error("Please enter your email address.")
+            else:
+                # Search database for this exact email
+                response = supabase.table("families").select("id, head_of_family").eq("email_id", input_email).execute()
+                
+                if response.data and len(response.data) > 0:
+                    st.session_state.logged_in = True
+                    st.session_state.family_id = response.data[0]["id"]
+                    st.success(f"Welcome back, {response.data[0]['head_of_family']}!")
+                    st.rerun()
+                else:
+                    st.error("This email is not registered yet. If this is your first time onboarding, please click the link below.")
+        
+        # Link to switch to Name + Illam login
+        if st.button("Forgot / No Email ID Registered? Click here to verify via Family Details"):
+            st.session_state.login_mode = "backdoor"
+            st.rerun()
+
+    # MODE B: BACKDOOR ONBOARDING (NAME + ILLAM)
+    elif st.session_state.login_mode == "backdoor":
+        st.subheader("Verify via Household Details (Onboarding)")
+        input_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name)").strip()
+        input_illam = st.text_input("ഇല്ലപ്പേര് (Illam Name)").strip()
+        
+        if st.button("Verify & Open Profile"):
+            if input_head == "" or input_illam == "":
+                st.error("Please fill in both fields.")
+            else:
+                # Look up the profile matching the credentials
+                response = supabase.table("families").select("id, head_of_family, email_id").ilike("head_of_family", f"%{input_head}%").ilike("illam_name", f"%{input_illam}%").execute()
+                
+                if response.data and len(response.data) > 0:
+                    found_family = response.data[0]
+                    registered_email = found_family.get("email_id")
+                    
+                    # CRITICAL RESTRICTION: If they have an email, block them from using this backdoor!
+                    if registered_email and str(registered_email).strip().lower() != 'null' and str(registered_email).strip() != '':
+                        st.error(f"🛑 Access Restricted! This profile already has a registered email address ({registered_email}). You must log in using the Primary Email screen.")
+                    else:
+                        # Allow entry since email_id is missing/blank
+                        st.session_state.logged_in = True
+                        st.session_state.family_id = found_family["id"]
+                        st.success(f"Verified successfully! Welcome, {found_family['head_of_family']}.")
+                        st.rerun()
+                else:
+                    st.error("Authentication Failed. No matching records found.")
+        
+        # Link to go back to email screen
+        if st.button("← Back to Email Login"):
+            st.session_state.login_mode = "email"
+            st.rerun()
+
+
+# ---- 2. LOGGED IN MEMBER PORTAL ----
+else:
+    f_id = st.session_state.family_id
+    
+    # Sidebar layout for Profile & Logout
+    if st.sidebar.button("Log Out"):
+        logout()
+
+    st.title("Yogakshemasabha Member Portal")
+    
+    # Fetch the family data
+    family_data = supabase.table("families").select("*").eq("id", f_id).execute().data[0]
+    
+    st.subheader("Your Household Information")
+    st.write(f"**Head of Family:** {family_data['head_of_family']}")
+    st.write(f"**Illam Name:** {family_data['illam_name']}")
+    st.write(f"**Address:** {family_data['address']}")
+    
+    # ---- DYNAMIC EMAIL REGISTRATION/DISPLAY ----
+    current_email = family_data.get('email_id')
+    
+    if not current_email or str(current_email).strip().lower() == 'null' or str(current_email).strip() == '':
+        with st.status("📧 Phase 2 Security Setup Required", expanded=True):
+            st.write("We are setting up secure email authentication. Please link a primary email address for your household:")
+            new_email = st.text_input("Enter Family Email Address", key="setup_email_input").strip().lower()
+            
+            if st.button("Save & Link Email"):
+                if "@" not in new_email or "." not in new_email:
+                    st.error("Please enter a valid email address.")
+                else:
                     try:
-                        supabase.auth.sign_in_with_otp({"phone": phone})
-                        st.session_state.otp_sent = True
-                        st.session_state.temp_phone = phone
+                        # Update the email_id column in Supabase
+                        supabase.table("families").update({"email_id": new_email}).eq("id", f_id).execute()
+                        st.success("Email address successfully linked! From now on, you must use this email to log in.")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error sending OTP. Ensure number is registered. {e}")
-                else:
-                    st.warning("Please enter a phone number.")
-        else:
-            otp = st.text_input("Enter 6-digit OTP")
-            if st.button("Verify & Login"):
-                try:
-                    res = supabase.auth.verify_otp({"phone": st.session_state.temp_phone, "token": otp, "type": "sms"})
-                    if res.user:
-                        st.session_state.role = "user"
-                        st.session_state.user_phone = st.session_state.temp_phone
-                        st.rerun()
-                except Exception as e:
-                    st.error("Invalid OTP. Try again.")
-
-    # ADMIN LOGIN
-    with tab2:
-        st.subheader("Implementer Login")
-        admin_user = st.text_input("Username")
-        admin_pass = st.text_input("Password", type="password")
-        if st.button("Admin Login"):
-            if admin_user == "admin" and admin_pass == "admin":
-                st.session_state.role = "admin"
-                st.rerun()
-            else:
-                st.error("Invalid Admin Credentials")
-
-# --- ADMIN DASHBOARD ---
-elif st.session_state.role == "admin":
-    st.success("Logged in as Admin")
-    if st.button("Logout"):
-        st.session_state.clear()
-        st.rerun()
-
-    st.subheader("Upload Excel Database")
-    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx", "csv"])
-
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
-
-            st.write("Preview of Uploaded Data:")
-            st.dataframe(df.head(3))
-
-            if st.button("Sync Data to Cloud Database"):
-                with st.spinner("Uploading..."):
-                    mapped_data = []
-                    for index, row in df.iterrows():
-                        phone_val = str(row.get('ഫോൺ നമ്പർ (Phone)', '')).replace('.0', '').strip()
-                        if phone_val and phone_val != 'nan':
-                            if not phone_val.startswith('+'):
-                                phone_val = '+91' + phone_val
-
-                            mapped_data.append({
-                                "phone": phone_val,
-                                "name": str(row.get('ഗൃഹനാഥന്റെ പേര് (Name of Gruhanathan)', '')),
-                                "address": str(row.get('മേൽവിലാസം (Address)', '')),
-                                "job": str(row.get('തൊഴിൽ (Job)', ''))
-                            })
-
-                    for record in mapped_data:
-                        existing = supabase.table('user_data').select("*").eq('phone', record['phone']).execute()
-                        if len(existing.data) > 0:
-                            supabase.table('user_data').update(record).eq('phone', record['phone']).execute()
+                        # This triggers if someone tries to use an email that another family already claimed
+                        if "unique constraint" in str(e).lower():
+                            st.error("This email address is already registered to another family profile. Please use a unique email.")
                         else:
-                            supabase.table('user_data').insert(record).execute()
-
-                st.success("Database successfully synchronized!")
-        except Exception as e:
-            st.error(f"Error reading file: {e}")
-
-# --- END USER DASHBOARD ---
-elif st.session_state.role == "user":
-    st.success(f"Welcome!")
-    if st.button("Logout"):
-        supabase.auth.sign_out()
-        st.session_state.clear()
-        st.rerun()
-
-    response = supabase.table('user_data').select("*").eq('phone', st.session_state.user_phone).execute()
-
-    if len(response.data) > 0:
-        user_record = response.data[0]
-
-        st.subheader("Your Profile")
-        with st.form("user_update_form"):
-            new_name = st.text_input("Name", value=user_record.get('name', ''))
-            new_address = st.text_area("Address", value=user_record.get('address', ''))
-            new_job = st.text_input("Job", value=user_record.get('job', ''))
-
-            if st.form_submit_button("Update Details"):
-                updated_data = {
-                    "name": new_name,
-                    "address": new_address,
-                    "job": new_job
-                }
-                supabase.table('user_data').update(updated_data).eq('phone', st.session_state.user_phone).execute()
-                st.success("Details updated successfully!")
+                            st.error("An error occurred while saving your email. Please try again.")
     else:
-        st.warning("No data found for this number. Please contact the administrator.")
+        st.info(f"🔒 Registered Login Identifier: **{current_email}**")
+
+    # ---- DISPLAY FAMILY MEMBERS ----
+    st.subheader("Registered Family Members")
+    members_data = supabase.table("members").select("*").eq("family_id", f_id).execute().data
+    
+    if members_data:
+        for member in members_data:
+            with st.container(border=True):
+                st.write(f"**Name:** {member['name']} ({member['relation']})")
+                if member['phone']: st.write(f"Phone: {member['phone']}")
+                if member['blood_group']: st.write(f"Blood Group: {member['blood_group']}")
+                if member['qualification']: st.write(f"Qualification: {member['qualification']}")
+                if member['job']: st.write(f"Job: {member['job']}")
