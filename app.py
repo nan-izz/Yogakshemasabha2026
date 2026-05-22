@@ -51,7 +51,7 @@ if not st.session_state.logged_in:
         if not st.session_state.otp_sent:
             input_email = st.text_input("Family Email Address").strip().lower()
             if st.button("Send Verification OTP"):
-                if "@" not in input_email or "." not in input_email:
+                if "@" not in input_email or "." not in input_email: 
                     st.error("Please enter a valid email address.")
                 else:
                     check_db = supabase.table("families").select("family_id").eq("email_id", input_email).execute()
@@ -122,7 +122,7 @@ else:
     family_data = supabase.table("families").select("*").eq("family_id", f_id).execute().data[0]
     header_address = family_data.get('address', '').strip()
 
-    # ---- HOUSHEOLD INFOMATION HEADER ----
+    # ---- HOUSEHOLD INFORMATION HEADER ----
     st.header("🏠 Household Information")
     with st.form("edit_family_form"):
         edit_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name)", value=family_data.get('head_of_family', ''))
@@ -167,11 +167,10 @@ else:
                 with st.form(f"update_member_{m_id}"):
                     col1, col2 = st.columns(2)
                     with col1:
-                        m_name = st.text_input("Name", value=member.get('name', ''))
-                        m_relation = st.text_input("Relation", value=member.get('relation', ''))
-                        m_dob = st.text_input("DOB (YYYY-MM-DD)", value=str(member.get('dob', '')) if member.get('dob') else '')
+                        m_name = st.text_input("Name *", value=member.get('name', ''))
+                        m_relation = st.text_input("Relation *", value=member.get('relation', ''))
+                        m_dob = st.text_input("DOB * (YYYY-MM-DD)", value=str(member.get('dob', '')) if member.get('dob') else '')
                         
-                        # Blood group drop-down implementation
                         curr_bg = member.get('blood_group', '').strip()
                         bg_index = BLOOD_GROUPS.index(curr_bg) if curr_bg in BLOOD_GROUPS else 0
                         m_blood = st.selectbox("Blood Group", options=BLOOD_GROUPS, index=bg_index, key=f"bg_edit_{m_id}")
@@ -184,43 +183,50 @@ else:
                     
                     m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)", value=str(member.get('adhaar', '')) if member.get('adhaar') else '', key=f"adhaar_edit_{m_id}")
                     
-                    # Current address toggle logic
+                    # Address Radio Toggle Configuration
                     db_addr = member.get('current_address', '').strip()
                     is_same_initial = (db_addr == header_address or "same as above" in db_addr.lower() or db_addr == "")
                     
-                    same_addr_check = st.checkbox("Current address same as above", value=is_same_initial, key=f"addr_chk_{m_id}")
+                    addr_radio_val = "Same as above" if is_same_initial else "Not same as above"
+                    m_addr_selection = st.radio(
+                        "Current Address Selection", 
+                        options=["Same as above", "Not same as above"], 
+                        index=0 if is_same_initial else 1,
+                        key=f"addr_radio_{m_id}"
+                    )
                     
                     m_curr_addr = ""
-                    if not same_addr_check:
-                        # Show custom field entry if not matching header
+                    if m_addr_selection == "Not same as above":
                         initial_custom_val = "" if is_same_initial else db_addr
                         m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
                     
                     if st.form_submit_button(f"Save Profile Changes for {member['name']}"):
-                        # Aadhaar Validator Rule
-                        is_valid_adhaar, cleaned_adhaar = validate_aadhaar(m_adhaar)
-                        
-                        if not is_valid_adhaar:
-                            st.error("❌ Invalid Aadhaar Number! It must be exactly 12 numeric digits or left completely blank.")
+                        # Mandatory Checks Validation
+                        if m_name.strip() == "" or m_relation.strip() == "" or m_dob.strip() == "":
+                            st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                         else:
-                            cleaned_dob = m_dob.strip() if m_dob.strip() != "" else None
-                            final_addr = header_address if same_addr_check else m_curr_addr.strip()
-                            final_bg = None if m_blood == 'Not Identified' else m_blood
+                            is_valid_adhaar, cleaned_adhaar = validate_aadhaar(m_adhaar)
                             
-                            supabase.table("members").update({
-                                "name": m_name.strip(),
-                                "relation": m_relation.strip(),
-                                "dob": cleaned_dob,
-                                "blood_group": final_bg,
-                                "phone": m_phone.strip(),
-                                "email": m_email.strip(),
-                                "qualification": m_qual.strip(),
-                                "job": m_job.strip(),
-                                "adhaar": cleaned_adhaar if cleaned_adhaar != "" else None,
-                                "current_address": final_addr
-                            }).eq("member_id", m_id).execute()
-                            st.success("Profile saved successfully!")
-                            st.rerun()
+                            if not is_valid_adhaar:
+                                st.error("❌ Invalid Aadhaar Number! It must be exactly 12 numeric digits or left completely blank.")
+                            else:
+                                final_addr = header_address if m_addr_selection == "Same as above" else m_curr_addr.strip()
+                                final_bg = None if m_blood == 'Not Identified' else m_blood
+                                
+                                supabase.table("members").update({
+                                    "name": m_name.strip(),
+                                    "relation": m_relation.strip(),
+                                    "dob": m_dob.strip(),
+                                    "blood_group": final_bg,
+                                    "phone": m_phone.strip(),
+                                    "email": m_email.strip(),
+                                    "qualification": m_qual.strip(),
+                                    "job": m_job.strip(),
+                                    "adhaar": cleaned_adhaar if cleaned_adhaar != "" else None,
+                                    "current_address": final_addr
+                                }).eq("member_id", m_id).execute()
+                                st.success("Profile saved successfully!")
+                                st.rerun()
                 
                 if st.button(f"❌ Delete {member['name']}", key=f"del_btn_{m_id}"):
                     supabase.table("members").delete().eq("member_id", m_id).execute()
@@ -234,8 +240,8 @@ else:
     with st.expander("Register a new member for this family"):
         with st.form("add_new_member_form", clear_on_submit=True):
             new_name = st.text_input("Full Name *")
-            new_relation = st.text_input("Relation (e.g., Wife, Son, Daughter)")
-            new_dob = st.text_input("DOB (YYYY-MM-DD)")
+            new_relation = st.text_input("Relation * (e.g., Wife, Son, Daughter)")
+            new_dob = st.text_input("DOB * (YYYY-MM-DD)")
             
             new_blood = st.selectbox("Blood Group", options=BLOOD_GROUPS, index=0)
             
@@ -245,34 +251,39 @@ else:
             new_job = st.text_input("Job / Profession")
             new_adhaar = st.text_input("Aadhaar Number (12 numeric digits)")
             
-            new_same_addr_check = st.checkbox("Current address same as above", value=True)
-            new_custom_addr = st.text_area("Enter Custom Current Address (If 'same as above' is unchecked)", value="")
+            new_addr_selection = st.radio(
+                "Current Address Selection", 
+                options=["Same as above", "Not same as above"], 
+                index=0
+            )
+            new_custom_addr = st.text_area("Enter Custom Current Address (If 'Not same as above' is selected)", value="")
             
             if st.form_submit_button("Add Member"):
-                is_valid_adhaar, cleaned_adhaar = validate_aadhaar(new_adhaar)
-                
-                if new_name.strip() == "":
-                    st.error("Name field is mandatory.")
-                elif not is_valid_adhaar:
-                    st.error("❌ Invalid Aadhaar Number! It must be exactly 12 numeric digits or left completely blank.")
+                # Mandatory fields validation check
+                if new_name.strip() == "" or new_relation.strip() == "" or new_dob.strip() == "":
+                    st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                 else:
-                    cleaned_dob = new_dob.strip() if new_dob.strip() != "" else None
-                    final_addr = header_address if new_same_addr_check else new_custom_addr.strip()
-                    final_bg = None if new_blood == 'Not Identified' else new_blood
+                    is_valid_adhaar, cleaned_adhaar = validate_aadhaar(new_adhaar)
                     
-                    supabase.table("members").insert({
-                        "family_id": f_id,
-                        "name": new_name.strip(),
-                        "relation": new_relation.strip(),
-                        "dob": cleaned_dob,
-                        "blood_group": final_bg,
-                        "phone": new_phone.strip(),
-                        "email": new_email.strip(),
-                        "qualification": new_qual.strip(),
-                        "job": new_job.strip(),
-                        "adhaar": cleaned_adhaar if cleaned_adhaar != "" else None,
-                        "current_address": final_addr
-                    }).execute()
-                    
-                    st.success(f"{new_name.strip()} added successfully!")
-                    st.rerun()
+                    if not is_valid_adhaar:
+                        st.error("❌ Invalid Aadhaar Number! It must be exactly 12 numeric digits or left completely blank.")
+                    else:
+                        final_addr = header_address if new_addr_selection == "Same as above" else new_custom_addr.strip()
+                        final_bg = None if new_blood == 'Not Identified' else new_blood
+                        
+                        supabase.table("members").insert({
+                            "family_id": f_id,
+                            "name": new_name.strip(),
+                            "relation": new_relation.strip(),
+                            "dob": new_dob.strip(),
+                            "blood_group": final_bg,
+                            "phone": new_phone.strip(),
+                            "email": new_email.strip(),
+                            "qualification": new_qual.strip(),
+                            "job": new_job.strip(),
+                            "adhaar": cleaned_adhaar if cleaned_adhaar != "" else None,
+                            "current_address": final_addr
+                        }).execute()
+                        
+                        st.success(f"{new_name.strip()} added successfully!")
+                        st.rerun()
