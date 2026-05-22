@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import re
 from supabase import create_client, Client
 
 # Initialize Supabase Client
@@ -15,7 +14,7 @@ BLOOD_GROUPS = ['Not Identified', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB
 def validate_aadhaar(aadhaar_str):
     cleaned = str(aadhaar_str).replace(" ", "").strip()
     if cleaned == "" or cleaned.lower() == "none" or cleaned.lower() == "null":
-        return True, ""  # Blank is allowed
+        return True, ""  
     if len(cleaned) == 12 and cleaned.isdigit():
         return True, cleaned
     return False, None
@@ -41,7 +40,7 @@ def logout():
     st.rerun()
 
 # -------------------------------------------------------------
-# 1. LANDING PAGE / LOGIN
+# 1. LANDING PAGE / LOGIN ROUTINES
 # -------------------------------------------------------------
 if not st.session_state.logged_in:
     st.title("Yogakshemasabha Portal")
@@ -139,7 +138,7 @@ else:
             st.success("Household updates committed!")
             st.rerun()
 
-    # ---- EMAIL COLLECTION IN PHASE 1 ----
+    # ---- EMAIL INTERCEPT ----
     current_email = family_data.get('email_id')
     if not current_email:
         with st.status("📧 Phase 2 Security Setup Required", expanded=True):
@@ -164,6 +163,25 @@ else:
             m_id = member['member_id']
             
             with st.expander(f"👤 {member['name']} ({member['relation'] or 'Member'})", expanded=False):
+                
+                # --- ADDRESS CONDITIONALS (PLACED OUTSIDE THE FORM FOR INSTANT UI RENDERING) ---
+                db_addr = member.get('current_address', '').strip()
+                is_same_initial = (db_addr == header_address or db_addr == "")
+                
+                m_addr_selection = st.radio(
+                    "Current Address Selection", 
+                    options=["Same as above", "Not same as above"], 
+                    index=0 if is_same_initial else 1,
+                    key=f"addr_radio_{m_id}"
+                )
+                
+                # Instantly shows box if user selects "Not same as above"
+                m_curr_addr = ""
+                if m_addr_selection == "Not same as above":
+                    initial_custom_val = "" if is_same_initial else db_addr
+                    m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
+                
+                # --- MAIN SUBMISSION DATA PROFILE FORM ---
                 with st.form(f"update_member_{m_id}"):
                     col1, col2 = st.columns(2)
                     with col1:
@@ -183,25 +201,8 @@ else:
                     
                     m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)", value=str(member.get('adhaar', '')) if member.get('adhaar') else '', key=f"adhaar_edit_{m_id}")
                     
-                    # Address Radio Toggle Configuration
-                    db_addr = member.get('current_address', '').strip()
-                    is_same_initial = (db_addr == header_address or "same as above" in db_addr.lower() or db_addr == "")
-                    
-                    addr_radio_val = "Same as above" if is_same_initial else "Not same as above"
-                    m_addr_selection = st.radio(
-                        "Current Address Selection", 
-                        options=["Same as above", "Not same as above"], 
-                        index=0 if is_same_initial else 1,
-                        key=f"addr_radio_{m_id}"
-                    )
-                    
-                    m_curr_addr = ""
-                    if m_addr_selection == "Not same as above":
-                        initial_custom_val = "" if is_same_initial else db_addr
-                        m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
-                    
                     if st.form_submit_button(f"Save Profile Changes for {member['name']}"):
-                        # Mandatory Checks Validation
+                        # Validation block
                         if m_name.strip() == "" or m_relation.strip() == "" or m_dob.strip() == "":
                             st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                         else:
@@ -238,6 +239,19 @@ else:
     # ---- ADD NEW MEMBER FORM ----
     st.header("➕ Add New Family Member")
     with st.expander("Register a new member for this family"):
+        
+        # Address elements are placed outside the form block to respond instantly
+        new_addr_selection = st.radio(
+            "Current Address Selection", 
+            options=["Same as above", "Not same as above"], 
+            index=0,
+            key="new_member_addr_radio"
+        )
+        
+        new_custom_addr = ""
+        if new_addr_selection == "Not same as above":
+            new_custom_addr = st.text_area("Enter Custom Current Address", value="", key="new_member_custom_addr")
+            
         with st.form("add_new_member_form", clear_on_submit=True):
             new_name = st.text_input("Full Name *")
             new_relation = st.text_input("Relation * (e.g., Wife, Son, Daughter)")
@@ -251,15 +265,8 @@ else:
             new_job = st.text_input("Job / Profession")
             new_adhaar = st.text_input("Aadhaar Number (12 numeric digits)")
             
-            new_addr_selection = st.radio(
-                "Current Address Selection", 
-                options=["Same as above", "Not same as above"], 
-                index=0
-            )
-            new_custom_addr = st.text_area("Enter Custom Current Address (If 'Not same as above' is selected)", value="")
-            
             if st.form_submit_button("Add Member"):
-                # Mandatory fields validation check
+                # Strict Mandatory Field Requirements
                 if new_name.strip() == "" or new_relation.strip() == "" or new_dob.strip() == "":
                     st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                 else:
