@@ -561,7 +561,7 @@ elif st.session_state.is_admin:
                         st.rerun()
 
 # -------------------------------------------------------------
-# 3. STANDARD USER PROFILE DASHBOARD (RENEWAL & CYCLE ENABLED)
+# 3. STANDARD USER PROFILE DASHBOARD
 # -------------------------------------------------------------
 else:
     f_id = st.session_state.family_id
@@ -623,57 +623,96 @@ else:
                     st.session_state.form_edit_enabled = False
                     st.rerun()
 
+        # MASTER COMPREHENSIVE ONE-CLICK UNIFIED REGISTRY FORM
         with st.form("master_unified_household_form"):
             st.header("🏡 Master Household Identity")
             is_disabled = not st.session_state.form_edit_enabled
+            header_address = family_data.get('address', '').strip()
 
             f_head = st.text_input("Head of Family Name", value=family_data.get('head_of_family', ''),
                                    disabled=is_disabled)
             f_illam = st.text_input("Illam Name", value=family_data.get('illam_name', ''), disabled=is_disabled)
-            f_goth = st.text_input("Gothram", value=family_data.get('gothram', ''), disabled=is_disabled)
-            f_addr = st.text_area("Master Core Address", value=family_data.get('address', ''), disabled=is_disabled)
+            f_goth = st.text_input("ഗോത്രം (Gothram)", value=family_data.get('gothram', ''), disabled=is_disabled)
+            f_addr = st.text_area("മേൽവിലാസം (Address)", value=header_address, disabled=is_disabled)
 
             st.write("---")
             st.header("👥 Household Members Roster")
             member_input_references = []
 
+            # Form-based input tracking list loop
             for m in members_data:
                 m_id = m['member_id']
-                st.markdown(f"##### Member Data Record: **{m['name']}** ({m['relation']})")
+                st.markdown(f"##### Record: **{m['name']}** ({m['relation'] or 'Member'})")
 
-                c1, c2, c3 = st.columns(3)
+                c1, c2 = st.columns(2)
                 with c1:
                     m_name = st.text_input("Name *", value=m.get('name', ''), key=f"u_nm_{m_id}", disabled=is_disabled)
                     m_rel = st.text_input("Relation *", value=m.get('relation', ''), key=f"u_rl_{m_id}",
                                           disabled=is_disabled)
+                    m_dob = st.text_input("DOB * (YYYY-MM-DD)", value=str(m.get('dob', '')) if m.get('dob') else '',
+                                          key=f"u_db_{m_id}", disabled=is_disabled)
+                    bg_index = auth.BLOOD_GROUPS.index(m['blood_group']) if m.get(
+                        'blood_group') in auth.BLOOD_GROUPS else 0
+                    m_blood = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS, index=bg_index, key=f"u_bg_{m_id}",
+                                           disabled=is_disabled)
                 with c2:
-                    m_dob = st.text_input("DOB * (YYYY-MM-DD)", value=str(m.get('dob', '')), key=f"u_db_{m_id}",
+                    m_phone = st.text_input("Phone Number", value=str(m.get('phone', '')) if m.get('phone') else '',
+                                            key=f"u_ph_{m_id}", disabled=is_disabled)
+                    m_email = st.text_input("Email", value=m.get('email', '') or '', key=f"u_em_{m_id}",
+                                            disabled=is_disabled)
+                    m_qual = st.text_input("Qualification", value=m.get('qualification', '') or '', key=f"u_ql_{m_id}",
+                                           disabled=is_disabled)
+                    m_job = st.text_input("Job / Occupation", value=m.get('job', '') or '', key=f"u_jb_{m_id}",
                                           disabled=is_disabled)
-                    m_ph = st.text_input("Phone", value=m.get('phone', '') or '', key=f"u_ph_{m_id}",
-                                         disabled=is_disabled)
-                with c3:
-                    m_em = st.text_input("Email", value=m.get('email', '') or '', key=f"u_em_{m_id}",
-                                         disabled=is_disabled)
-                    m_bg = st.text_input("Blood Group", value=m.get('blood_group', '') or '', key=f"u_bg_{m_id}",
+
+                m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)",
+                                         value=str(m.get('adhaar', '')) if m.get('adhaar') else '', key=f"u_ad_{m_id}",
                                          disabled=is_disabled)
 
+                is_same_initial = (m.get('current_address', '').strip() == header_address or m.get('current_address',
+                                                                                                   '').strip() == "")
+
+                m_addr_selection = st.selectbox("Current Address Selection",
+                                                options=["Same as above", "Custom Address"],
+                                                index=0 if is_same_initial else 1, key=f"u_rad_{m_id}",
+                                                disabled=is_disabled)
+                m_curr_addr = st.text_area("Custom Current Address (Only applied if Custom Address is selected above)",
+                                           value=m.get('current_address', '') if not is_same_initial else "",
+                                           key=f"u_txa_{m_id}", disabled=is_disabled)
+
                 member_input_references.append({
-                    "member_id": m_id, "name": m_name, "relation": m_rel, "dob": m_dob, "phone": m_ph, "email": m_em,
-                    "blood_group": m_bg
+                    "member_id": m_id, "name": m_name, "relation": m_rel, "dob": m_dob,
+                    "blood_group": m_blood, "phone": m_phone, "email": m_email,
+                    "qualification": m_qual, "job": m_job, "adhaar": m_adhaar,
+                    "addr_selection": m_addr_selection, "custom_addr": m_curr_addr
                 })
                 st.write("")
 
             if st.session_state.form_edit_enabled:
                 if st.form_submit_button("💾 Save All Modifications"):
                     db.update_family_header(f_id, f_head, f_illam, f_goth, f_addr)
+
                     for field in member_input_references:
-                        db.admin_direct_save_member(field["member_id"], {
-                            "name": field["name"], "relation": field["relation"], "dob": field["dob"],
-                            "phone": field["phone"] if field["phone"] != "" else None,
-                            "email": field["email"] if field["email"] != "" else None,
-                            "blood_group": field["blood_group"] if field["blood_group"] != "" else None
-                        })
-                    st.success("✨ Complete household dataset successfully synchronized!")
+                        is_valid, clean_a = auth.validate_aadhaar(field["adhaar"])
+                        if field["name"].strip() == "" or field["relation"].strip() == "" or field["dob"].strip() == "":
+                            st.error(f"❌ Required core inputs are blank for member {field['name']}.")
+                        elif not is_valid:
+                            st.error(f"❌ Invalid Aadhaar formatting on member {field['name']}.")
+                        else:
+                            final_m_addr = f_addr if field["addr_selection"] == "Same as above" else field[
+                                "custom_addr"].strip()
+                            db.submit_pending_approval("members", "UPDATE", st.session_state.auth_email, {
+                                "name": field["name"].strip(), "relation": field["relation"].strip(),
+                                "dob": field["dob"].strip(),
+                                "blood_group": None if field["blood_group"] == 'Not Identified' else field[
+                                    "blood_group"],
+                                "phone": field["phone"].strip() if field["phone"] else None,
+                                "email": field["email"].strip() if field["email"] else None,
+                                "qualification": field["qualification"].strip() if field["qualification"] else None,
+                                "job": field["job"].strip() if field["job"] else None,
+                                "adhaar": clean_a if clean_a != "" else None, "current_address": final_m_addr
+                            }, target_id=field["member_id"])
+                    st.success("✨ Complete household dataset modifications successfully routed to admin review queue!")
                     st.session_state.form_edit_enabled = False
                     st.rerun()
             else:
@@ -681,6 +720,59 @@ else:
                     db.update_family_verification_state(f_id, "Data Verified")
                     st.success("Profile records verified and locked! Shifting execution to Payment interface.")
                     st.rerun()
+
+        # ---- DYNAMIC ACTIONS LAYER: REMOVE OR ADD ROW PROVISIONS (LIFTED OUTSIDE FORM SCOPE) ----
+        if not is_disabled:
+            st.write("---")
+            st.subheader("🛠️ Immediate Membership Operations Queue")
+
+            # --- OPERATION 1: SUBMIT MEMBER REMOVAL ---
+            for m in members_data:
+                if st.button(f"❌ Request Deletion of {m['name']}", key=f"del_btn_{m['member_id']}"):
+                    db.submit_pending_approval("members", "DELETE", st.session_state.auth_email, {"name": m['name']},
+                                               target_id=m['member_id'])
+                    st.warning(f"📩 Deletion request for {m['name']} logged successfully into queue review matrix.")
+                    st.rerun()
+
+            # --- OPERATION 2: PROVISION NEW MEMBER SUBMISSION ---
+            with st.expander("➕ Request Adding a New Member to this Household"):
+                new_name = st.text_input("Full Name *", key="new_name")
+                new_relation = st.text_input("Relation * (e.g., Wife, Son)", key="new_rel")
+                new_dob = st.text_input("DOB * (YYYY-MM-DD)", key="new_dob")
+                new_blood = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS, index=0, key="new_bg")
+                new_phone = st.text_input("Phone Number", key="new_phone")
+                new_email = st.text_input("Email Address", key="new_email")
+                new_qual = st.text_input("Qualification", key="new_qual")
+                new_job = st.text_input("Job / Profession", key="new_job")
+                new_adhaar = st.text_input("Aadhaar Number (12 numeric digits)", key="new_adhaar")
+                new_addr_sel = st.radio("Current Address Selection", options=["Same as above", "Custom Address"],
+                                        index=0, key="new_member_addr_radio")
+                new_custom_addr = st.text_area("Enter Custom Current Address", value="",
+                                               key="new_member_custom_addr") if new_addr_sel == "Custom Address" else ""
+
+                if st.button("Submit New Member Profile to Queue"):
+                    if new_name.strip() == "" or new_relation.strip() == "" or new_dob.strip() == "":
+                        st.error("❌ Mandatory parameters missing.")
+                    else:
+                        is_valid, clean_a = auth.validate_aadhaar(new_adhaar)
+                        if not is_valid:
+                            st.error("❌ Invalid Aadhaar Number format structure.")
+                        else:
+                            final_n_addr = family_data.get('address',
+                                                           '') if new_addr_sel == "Same as above" else new_custom_addr.strip()
+                            db.submit_pending_approval("members", "INSERT", st.session_state.auth_email, {
+                                "family_id": f_id, "name": new_name.strip(), "relation": new_relation.strip(),
+                                "dob": new_dob.strip(),
+                                "blood_group": None if new_blood == 'Not Identified' else new_blood,
+                                "phone": new_phone.strip() if new_phone else None,
+                                "email": new_email.strip() if new_email else None,
+                                "qualification": new_qual.strip() if new_qual else None,
+                                "job": new_job.strip() if new_job else None,
+                                "adhaar": clean_a if clean_a != "" else None, "current_address": final_n_addr
+                            })
+                            st.success(
+                                "📩 Registration safely routed to the committee verification matrix queue layout!")
+                            st.rerun()
 
     else:
         st.subheader("🏡 Household Summary (Locked)")
@@ -693,7 +785,7 @@ else:
         st.write("---")
         st.header("💳 Settle Annual Membership Dues")
         st.markdown(
-            f"Please scan the QR matrix below or transfer the **₹{active_fee}** renewal fee using the listed UPI credentials.")
+            f"Please scan the QR matrix below or transfer the **`₹{active_fee}`** renewal fee using the listed UPI credentials.")
 
         live_upi_id = admin_cfg.get("upi_id", "sabha@upi")
         live_qr_url = admin_cfg.get("upi_qr_url", None)
