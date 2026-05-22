@@ -142,3 +142,10 @@ def send_supabase_otp(email):
     # Changing should_create_user to True allows Supabase to dynamically
     # provision an auth record for the email when they verify their first code!
     supabase.auth.sign_in_with_otp({"email": email, "options": {"should_create_user": True}})
+
+def fetch_all_families_global():
+    try:
+        # Resolves the AttributeError by restoring the global hook with retry safety
+        return supabase.table("families").select("*").order("head_of_family").execute().data
+    except Exception:
+        return supabase.table("families").select("*").order("head_of_family").execute().data
