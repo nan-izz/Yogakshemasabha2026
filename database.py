@@ -149,3 +149,10 @@ def fetch_all_families_global():
         return supabase.table("families").select("*").order("head_of_family").execute().data
     except Exception:
         return supabase.table("families").select("*").order("head_of_family").execute().data
+
+def fetch_district_sabha_report_data():
+    try:
+        # Pulls targeted reporting fields along with the family relation pointer
+        return supabase.table("members").select("name, dob, blood_group, current_address, phone, created_at, family_id").execute().data
+    except Exception:
+        return supabase.table("members").select("name, dob, blood_group, current_address, phone, created_at, family_id").execute().data
