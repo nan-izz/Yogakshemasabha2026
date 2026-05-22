@@ -120,4 +120,6 @@ def admin_update_credentials(username, password):
 
 
 def send_supabase_otp(email):
-    supabase.auth.sign_in_with_otp({"email": email, "options": {"should_create_user": False}})
+    # Changing should_create_user to True allows Supabase to dynamically
+    # provision an auth record for the email when they verify their first code!
+    supabase.auth.sign_in_with_otp({"email": email, "options": {"should_create_user": True}})
