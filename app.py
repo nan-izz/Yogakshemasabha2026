@@ -19,6 +19,10 @@ def validate_aadhaar(aadhaar_str):
         return True, cleaned
     return False, None
 
+# Simple callback trigger to force a layout refresh inside forms
+def refresh_form_layout():
+    pass
+
 # Initialize Session State
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -40,7 +44,7 @@ def logout():
     st.rerun()
 
 # -------------------------------------------------------------
-# 1. LANDING PAGE / LOGIN ROUTINES
+# 1. LANDING PAGE / LOGIN
 # -------------------------------------------------------------
 if not st.session_state.logged_in:
     st.title("Yogakshemasabha Portal")
@@ -163,25 +167,6 @@ else:
             m_id = member['member_id']
             
             with st.expander(f"👤 {member['name']} ({member['relation'] or 'Member'})", expanded=False):
-                
-                # --- ADDRESS CONDITIONALS (PLACED OUTSIDE THE FORM FOR INSTANT UI RENDERING) ---
-                db_addr = member.get('current_address', '').strip()
-                is_same_initial = (db_addr == header_address or db_addr == "")
-                
-                m_addr_selection = st.radio(
-                    "Current Address Selection", 
-                    options=["Same as above", "Not same as above"], 
-                    index=0 if is_same_initial else 1,
-                    key=f"addr_radio_{m_id}"
-                )
-                
-                # Instantly shows box if user selects "Not same as above"
-                m_curr_addr = ""
-                if m_addr_selection == "Not same as above":
-                    initial_custom_val = "" if is_same_initial else db_addr
-                    m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
-                
-                # --- MAIN SUBMISSION DATA PROFILE FORM ---
                 with st.form(f"update_member_{m_id}"):
                     col1, col2 = st.columns(2)
                     with col1:
@@ -201,8 +186,26 @@ else:
                     
                     m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)", value=str(member.get('adhaar', '')) if member.get('adhaar') else '', key=f"adhaar_edit_{m_id}")
                     
+                    # --- INSIDE THE FORM ADDRESS CONFIGURATION ---
+                    db_addr = member.get('current_address', '').strip()
+                    is_same_initial = (db_addr == header_address or db_addr == "")
+                    
+                    # we add on_change callback to force the form container to refresh visual state immediately
+                    m_addr_selection = st.radio(
+                        "Current Address Selection", 
+                        options=["Same as above", "Not same as above"], 
+                        index=0 if is_same_initial else 1,
+                        key=f"addr_radio_{m_id}",
+                        on_change=refresh_form_layout
+                    )
+                    
+                    m_curr_addr = ""
+                    if m_addr_selection == "Not same as above":
+                        initial_custom_val = "" if is_same_initial else db_addr
+                        m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
+                    
                     if st.form_submit_button(f"Save Profile Changes for {member['name']}"):
-                        # Validation block
+                        # Validation checks
                         if m_name.strip() == "" or m_relation.strip() == "" or m_dob.strip() == "":
                             st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                         else:
@@ -239,19 +242,6 @@ else:
     # ---- ADD NEW MEMBER FORM ----
     st.header("➕ Add New Family Member")
     with st.expander("Register a new member for this family"):
-        
-        # Address elements are placed outside the form block to respond instantly
-        new_addr_selection = st.radio(
-            "Current Address Selection", 
-            options=["Same as above", "Not same as above"], 
-            index=0,
-            key="new_member_addr_radio"
-        )
-        
-        new_custom_addr = ""
-        if new_addr_selection == "Not same as above":
-            new_custom_addr = st.text_area("Enter Custom Current Address", value="", key="new_member_custom_addr")
-            
         with st.form("add_new_member_form", clear_on_submit=True):
             new_name = st.text_input("Full Name *")
             new_relation = st.text_input("Relation * (e.g., Wife, Son, Daughter)")
@@ -265,8 +255,20 @@ else:
             new_job = st.text_input("Job / Profession")
             new_adhaar = st.text_input("Aadhaar Number (12 numeric digits)")
             
+            # --- INSIDE THE NEW FORM ADDRESS CONFIGURATION ---
+            new_addr_selection = st.radio(
+                "Current Address Selection", 
+                options=["Same as above", "Not same as above"], 
+                index=0,
+                key="new_member_addr_radio",
+                on_change=refresh_form_layout
+            )
+            
+            new_custom_addr = ""
+            if new_addr_selection == "Not same as above":
+                new_custom_addr = st.text_area("Enter Custom Current Address", value="", key="new_member_custom_addr")
+            
             if st.form_submit_button("Add Member"):
-                # Strict Mandatory Field Requirements
                 if new_name.strip() == "" or new_relation.strip() == "" or new_dob.strip() == "":
                     st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                 else:
