@@ -275,17 +275,29 @@ elif st.session_state.is_admin:
 
                         # Dataframe Layout Strategy Implementation
                         if action == "INSERT":
-                            st.info("🆕 Complete New Entry Profile Dataset:")
+                            st.markdown("""
+                                <div style='background-color:#e8f4fd; padding:10px 15px; border-radius:8px; border-left:5px solid #0068c9; margin-bottom:10px;'>
+                                    <b style='color:#004085;'>🆕 Staged Onboarding Entry Profile</b><br><span style='font-size:12px; color:#004085;'>Review full registration schema parameters below:</span>
+                                </div>
+                            """, unsafe_allow_html=True)
                             df_parsed = pd.DataFrame([payload])
                             st.dataframe(df_parsed, use_container_width=True, hide_index=True)
 
                         elif action == "DELETE":
-                            st.warning("⚠️ Target Record Profile Slated for Deletion:")
+                            st.markdown("""
+                                <div style='background-color:#f8d7da; padding:10px 15px; border-radius:8px; border-left:5px solid #dc3545; margin-bottom:10px;'>
+                                    <b style='color:#721c24;'>⚠️ Destructive Removal Request</b><br><span style='font-size:12px; color:#721c24;'>The record below will be dropped from active database directories upon approval:</span>
+                                </div>
+                            """, unsafe_allow_html=True)
                             df_parsed = pd.DataFrame([payload])
                             st.dataframe(df_parsed, use_container_width=True, hide_index=True)
 
                         elif action == "UPDATE":
-                            st.info("🔄 Modified Structural Fields Matrix View:")
+                            st.markdown("""
+                                <div style='background-color:#fff3cd; padding:10px 15px; border-radius:8px; border-left:5px solid #ffc107; margin-bottom:10px;'>
+                                    <b style='color:#856404;'>🔄 Intercepted Profile Mutation Trace</b><br><span style='font-size:12px; color:#856404;'>A user is attempting to overwrite data. Compare changes below:</span>
+                                </div>
+                            """, unsafe_allow_html=True)
                             diff_summary = []
                             if table == "members" and target_row_id:
                                 try:
@@ -360,13 +372,11 @@ elif st.session_state.is_admin:
 
                             b_cols = st.columns([4, 1])
                             with b_cols[0]:
-                                # FIXED: Converted from custom variable prefix call to native Streamlit namespace
                                 if st.form_submit_button("💾 Direct Save Header Changes"):
                                     db.update_family_header(f['family_id'], a_head, a_illam, a_goth, a_addr)
                                     st.success("Header saved directly!")
                                     st.rerun()
                             with b_cols[1]:
-                                # FIXED: Converted from custom variable prefix call to native Streamlit namespace
                                 if st.form_submit_button("❌ Drop Household"):
                                     db.admin_direct_delete_family(f['family_id'])
                                     st.warning("Household entry dropped!")
@@ -395,7 +405,6 @@ elif st.session_state.is_admin:
 
                                     m_cols = st.columns([4, 1])
                                     with m_cols[0]:
-                                        # FIXED: Converted to native Streamlit namespace
                                         if st.form_submit_button("💾 Save Member Direct"):
                                             is_valid, clean_a = auth.validate_aadhaar(ma_adh)
                                             if ma_name.strip() == "" or ma_rel.strip() == "" or ma_dob.strip() == "":
@@ -417,7 +426,6 @@ elif st.session_state.is_admin:
                                                 st.success("Member saved!")
                                                 st.rerun()
                                     with m_cols[1]:
-                                        # FIXED: Converted to native Streamlit namespace
                                         if st.form_submit_button("❌ Drop"):
                                             db.admin_direct_delete_member(m['member_id'])
                                             st.warning("Member dropped!")
@@ -540,7 +548,7 @@ elif st.session_state.is_admin:
                         st.rerun()
 
 # -------------------------------------------------------------
-# 3. STANDARD USER WORKSPACE (WITH AUTOMATED LOCKS & BANNERS)
+# 3. STANDARD USER WORKSPACE (WITH HIGH-DENSITY MODERN LAYOUTS)
 # -------------------------------------------------------------
 else:
     f_id = st.session_state.family_id
@@ -584,7 +592,6 @@ else:
         is_disabled = True
         is_payment_allowed = False
     else:
-        # Automatic lifecycle un-binder: if admin processed the request, fields unlock immediately here!
         is_disabled = (v_status != "Pending Update")
         is_payment_allowed = (v_status == "Data Verified")
 
@@ -608,16 +615,40 @@ else:
 
     # ---- TAB 1: HOUSEHOLD IDENTITY CORE HEADER ----
     with user_tabs[0]:
-        st.subheader("Household Structural Settings")
+        st.write("")
         if is_disabled or v_status != "Pending Update":
             if not is_stuck_in_approval_queue:
-                st.info(
-                    "🔒 Data has been locked for audit phase. If any corrections are needed, contact the Sabha Secretary.")
-            st.markdown(f"**Head of Family Name:** {family_data.get('head_of_family')}")
-            st.markdown(f"**Illam Name:** {family_data.get('illam_name')}")
-            st.markdown(f"**Gothram:** {family_data.get('gothram')}")
-            st.markdown(f"**Core Home Address:**")
-            st.text(family_data.get('address', ''))
+                st.markdown("#### 🔒 Household Identity Ledger (Locked)")
+            else:
+                st.markdown("#### ⏳ Household Identity Ledger (Approval Pending)")
+
+            # --- HIGH-DENSITY ENTERPRISE DESIGN GRID ---
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"""
+                    <div style='background-color:#f8f9fa; padding:20px; border-radius:12px; border-left: 5px solid #ff4b4b; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
+                        <span style='color:#6c757d; font-size:12px; font-weight:600; text-transform: uppercase;'>HEAD OF HOUSEHOLD</span><br>
+                        <span style='color:#212529; font-size:20px; font-weight:700;'>{family_data.get('head_of_family')}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"""
+                    <div style='background-color:#f8f9fa; padding:20px; border-radius:12px; border-left: 5px solid #0068c9; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
+                        <span style='color:#6c757d; font-size:12px; font-weight:600; text-transform: uppercase;'>ILLAM UNIT NAME</span><br>
+                        <span style='color:#212529; font-size:20px; font-weight:700;'>{family_data.get('illam_name')}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col3:
+                st.markdown(f"""
+                    <div style='background-color:#f8f9fa; padding:20px; border-radius:12px; border-left: 5px solid #29b6f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
+                        <span style='color:#6c757d; font-size:12px; font-weight:600; text-transform: uppercase;'>REGISTERED GOTHRAM</span><br>
+                        <span style='color:#212529; font-size:20px; font-weight:700;'>{family_data.get('gothram') or 'N/A'}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+
+            st.write("")
+            st.markdown("**🏡 Master Communication Address:**")
+            st.info(family_data.get('address', 'N/A'))
         else:
             with st.form("edit_family_header_modular_form"):
                 h_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name)",
@@ -632,7 +663,7 @@ else:
 
     # ---- TAB 2: FUNCTIONAL MEMBERS MANAGEMENT LAYER ----
     with user_tabs[1]:
-        st.subheader("Manage Family Directory")
+        st.write("")
         header_address = family_data.get('address', '').strip()
 
         # ONE-CLICK BULK UPDATE FOR COMPLEX MEMBER ROSTERS
@@ -645,7 +676,11 @@ else:
                 for m in members_data:
                     m_id = m['member_id']
                     with st.container(border=True):
-                        st.markdown(f"##### Profile Card: **{m['name']}** ({m['relation'] or 'Member'})")
+                        # Visual Header Card Ribbon
+                        st.markdown(
+                            f"#### 👤 {m['name']} <span style='font-size:14px; color:#6c757d;'>({m['relation'] or 'Member'})</span>",
+                            unsafe_allow_html=True)
+
                         c1, c2 = st.columns(2)
                         with c1:
                             m_name = st.text_input("Name *", value=m.get('name', ''), key=f"u_nm_{m_id}",
@@ -675,6 +710,7 @@ else:
                             m_job = st.text_input("Job / Occupation", value=m.get('job', '') or '', key=f"u_jb_{m_id}",
                                                   disabled=is_disabled)
 
+                        st.write("---")
                         m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)",
                                                  value=str(m.get('adhaar', '')) if m.get('adhaar') else '',
                                                  key=f"u_ad_{m_id}", disabled=is_disabled)
@@ -790,32 +826,45 @@ else:
                 "⚠️ Please complete your profile records updates and lock verification on **Tab 2 (Family Members Roster)** to unlock payment gateways.")
 
         elif v_status == "Data Verified":
-            st.subheader("💳 Settle Annual Membership Dues")
-            st.markdown(
-                f"Please scan the QR tracking matrix below or wire your **`₹{active_fee}`** subscription directly to treasury.")
+            st.markdown("### 💳 Secure Treasury Subscription Gateway")
+            st.write("")
 
-            pay_layout_col1, pay_layout_col2 = st.columns([1, 2])
+            pay_layout_col1, pay_layout_col2 = st.columns([2, 3])
             with pay_layout_col1:
-                if admin_cfg.get("upi_qr_url"):
-                    st.image(admin_cfg["upi_qr_url"], caption="Scan using GPay, PhonePe, or PayTM",
-                             use_container_width=True)
-                else:
-                    st.warning("⚠️ UPI payment matrix chart graphic unavailable.")
-            with pay_layout_col2:
+                # Bounded Image Card UI
                 with st.container(border=True):
-                    st.markdown("### 📋 Payment Instructions")
-                    st.markdown(f"**Amount Due:** `₹{active_fee}`")
-                    st.markdown(f"**Sabha VPA Address Handle:** `{admin_cfg.get('upi_id', 'sabha@upi')}`")
-                    st.write("---")
-                    with st.form("payment_submission_form"):
-                        bank_ref_id = st.text_input("Enter 12-Digit Bank Transaction Reference Token ID *").strip()
-                        if st.form_submit_button("Submit Reference ID"):
-                            if bank_ref_id == "":
-                                st.error("Reference trace index cannot be empty.")
-                            else:
-                                db.update_family_verification_state(f_id, "Payment Submitted", payment_ref=bank_ref_id)
-                                st.success("Reference token safely pushed to treasury dashboard queue layout!")
-                                st.rerun()
+                    st.markdown(
+                        "<p style='text-align:center; font-weight:700; margin-bottom:5px; text-transform:uppercase;'>OFFICIAL SABHA TREASURY QR</p>",
+                        unsafe_allow_html=True)
+                    if admin_cfg.get("upi_qr_url"):
+                        st.image(admin_cfg["upi_qr_url"], use_container_width=True)
+                    else:
+                        st.warning("⚠️ Official UPI QR graphic file asset un-uploaded by management.")
+                    st.markdown(
+                        "<p style='text-align:center; font-size:12px; color:#6c757d;'>Scan directly using BHIM, GPay, PhonePe, or PayTM</p>",
+                        unsafe_allow_html=True)
+
+            with pay_layout_col2:
+                st.markdown("#### 📋 Checkout Pipeline Steps")
+                st.markdown(f"""
+                    1. **Verify Calculated Fee:** You are clearing membership logs for <code style='font-size:14px; color:#ff4b4b; font-weight:700;'>₹{active_fee}</code>.
+                    2. **Execute Electronic Wire:** Scan the target QR matrix on the left, or manually process a transfer to the official VPA handle identifier:
+                    <div style='background-color:#e8f4fd; padding:10px; border-radius:6px; margin: 10px 0; font-family:monospace; font-size:15px; font-weight:700; color:#0056b3; text-align:center;'>
+                        {admin_cfg.get('upi_id', 'sabha@upi')}
+                    </div>
+                    3. **Log Reference Verification Token:** Once completed, submit your standard 12-digit UPI reference transaction number below.
+                """, unsafe_allow_html=True)
+
+                st.write("")
+                with st.form("payment_submission_form"):
+                    bank_ref_id = st.text_input("Enter 12-Digit Bank Transaction Reference Token ID *").strip()
+                    if st.form_submit_button("Submit Reference ID"):
+                        if bank_ref_id == "":
+                            st.error("Reference trace index cannot be empty.")
+                        else:
+                            db.update_family_verification_state(f_id, "Payment Submitted", payment_ref=bank_ref_id)
+                            st.success("Reference token safely pushed to treasury dashboard queue layout!")
+                            st.rerun()
 
         elif v_status == "Payment Submitted":
             st.subheader("💳 Transaction Staged")
