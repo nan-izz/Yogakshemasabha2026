@@ -4,13 +4,12 @@ import csv
 import io
 import pandas as pd
 
-# Import modular custom logic engines
-import database as db
 import auth
+import database as db
 
 st.set_page_config(layout="wide")
 
-# Inject hidden HTML link descriptors to guide mobile devices to your static manifest configuration mapping
+# PWA Head Tags Injection
 st.components.v1.html(
     """
     <head>
@@ -21,6 +20,7 @@ st.components.v1.html(
     """, height=0, width=0
 )
 
+# Session Initialization
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "family_id" not in st.session_state: st.session_state.family_id = None
 if "auth_email" not in st.session_state: st.session_state.auth_email = None
@@ -39,22 +39,23 @@ def logout():
 main_display_viewport = st.container()
 
 # -------------------------------------------------------------
-# 1. IDENTITY AUTHENTICATION ENGINE (ISOLATED EXECUTION LAYER)
+# 1. IDENTITY AUTHENTICATION ENGINE
 # -------------------------------------------------------------
 if not st.session_state.logged_in:
     with main_display_viewport:
         st.title("Yogakshemasabha Portal")
 
+        # ---- SUB-ROUTE: NEW HOUSEHOLD REGISTRATION FORM ----
         if st.session_state.register_mode:
             st.subheader("📝 Request New Household Registration")
             with st.form("new_family_reg_form"):
-                reg_head = st.text_input("ഗൃഹനാഥന്റെ പേര് *")
-                reg_illam = st.text_input("ഇല്ലപ്പേര് *")
-                reg_goth = st.text_input("ഗോത്രം")
+                reg_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name) *")
+                reg_illam = st.text_input("ഇല്ലപ്പേര് (Illam Name) *")
+                reg_goth = st.text_input("ഗോത്രം (Gothram)")
                 reg_email = st.text_input("Login Email ID *").strip().lower()
                 reg_phone = st.text_input("Contact Phone Number *")
                 reg_dob = st.date_input("Head of Family DOB *", value=datetime.date(1985, 1, 1))
-                reg_addr = st.text_area("മേൽവിലാസം *")
+                reg_addr = st.text_area("മേൽവിലാസം (Address) *")
 
                 if st.form_submit_button("Submit Registration Request"):
                     if not reg_head or not reg_illam or not reg_email or not reg_phone or not reg_addr:
@@ -68,54 +69,111 @@ if not st.session_state.logged_in:
                             "address": reg_addr.strip(), "head_phone": reg_phone.strip(),
                             "head_dob": reg_dob.strftime("%Y-%m-%d")
                         })
-                        st.success("📩 Request sent successfully!")
+                        st.success("📩 Onboarding request successfully sent to the committee!")
                         st.session_state.register_mode = False
                         st.rerun()
             if st.button("← Back to Login"):
                 st.session_state.register_mode = False
                 st.rerun()
 
+        # ---- MAIN ROUTE: STANDARD EMAIL / ADMIN INTERFACE ----
         elif st.session_state.login_mode == "email":
             st.subheader("Household Email / Admin Login")
             admin_cfg = db.fetch_admin_config()
-            input_email = st.text_input("Enter Email Identifier / Admin Username").strip().lower()
 
-            if st.button("Proceed to Login"):
-                if input_email == admin_cfg["username"]:
-                    st.session_state.auth_email = input_email
-                    st.session_state.admin_password_mode = True
-                    st.rerun()
-                elif db.check_family_email_exists(input_email):
-                    db.send_supabase_otp(input_email)
-                    st.session_state.auth_email = input_email
-                    st.session_state.otp_sent = True
-                    st.success(f"Verification code sent to {input_email}")
-                    st.rerun()
+            if not st.session_state.otp_sent and not st.session_state.admin_password_mode:
+                input_email = st.text_input("Enter Email Identifier / Admin Username").strip().lower()
+
+                if st.button("Proceed to Login"):
+                    if input_email == admin_cfg["username"]:
+                        st.session_state.auth_email = input_email
+                        st.session_state.admin_password_mode = True
+                        st.rerun()
+                    elif "@" not in input_email or "." not in input_email:
+                        st.error("❌ Please enter a valid email address.")
+                    elif db.check_family_email_exists(input_email):
+                        db.send_supabase_otp(input_email)
+                        st.session_state.auth_email = input_email
+                        st.session_state.otp_sent = True
+                        st.success(f"Verification code sent successfully to {input_email}")
+                        st.rerun()
+                    else:
+                        st.error(
+                            "🛑 This email is not registered. Use the onboarding link below if you are a new family.")
+
+                st.write("---")
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    if st.button("🔍 Alternative: Login Using Family Head & Illam Name"):
+                        st.session_state.login_mode = "backdoor"
+                        st.rerun()
+                with col_b2:
+                    if st.button("✨ New Family? Register New Household Profile here"):
+                        st.session_state.register_mode = True
+                        st.rerun()
+
+            elif st.session_state.admin_password_mode:
+                st.info(f"🛡️ Administrative Access Channel: **{st.session_state.auth_email}**")
+                admin_pwd_input = st.text_input("Enter Admin Password", type="password")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Verify & Open Workspace"):
+                        if admin_pwd_input == admin_cfg["password"]:
+                            st.session_state.is_admin = True
+                            st.session_state.logged_in = True
+                            st.rerun()
+                        else:
+                            st.error("❌ Invalid Administrative Password Credential.")
+                with col2:
+                    if st.button("← Cancel"):
+                        st.session_state.admin_password_mode = False
+                        st.session_state.auth_email = None
+                        st.rerun()
+
+            elif st.session_state.otp_sent:
+                st.info(f"📩 Logging into Household Profile: **{st.session_state.auth_email}**")
+                otp_token = st.text_input("Enter the 6-Digit Verification Code sent to your inbox", max_chars=6).strip()
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Verify Code & Open Dashboard"):
+                        family_lookup = db.fetch_family_by_email(st.session_state.auth_email)
+                        if family_lookup:
+                            st.session_state.family_id = family_lookup["family_id"]
+                            st.session_state.logged_in = True
+                            st.rerun()
+                        else:
+                            st.error("❌ Link broken. Record not recovered.")
+                with col2:
+                    if st.button("← Cancel"):
+                        st.session_state.otp_sent = False
+                        st.session_state.auth_email = None
+                        st.rerun()
+
+        elif st.session_state.login_mode == "backdoor":
+            st.subheader("Verify via Household Details (No Email Connected)")
+            input_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name)").strip()
+            input_illam = st.text_input("ഇല്ലപ്പേര് (Illam Name)").strip()
+
+            if st.button("Find and Verify Profile"):
+                records = db.verify_backdoor_details(input_head, input_illam)
+                if records:
+                    found = records[0]
+                    if found.get("email_id") and str(found.get("email_id")).strip() != "" and str(
+                            found.get("email_id")).lower() != "none":
+                        st.error(
+                            f"🛑 Security Block: This household profile has already been assigned an email ({found['email_id']}). You must use email verification.")
+                    else:
+                        st.session_state.family_id = found["family_id"]
+                        st.session_state.logged_in = True
+                        st.rerun()
                 else:
-                    st.error("Email identifier not found in records.")
-            st.write("---")
-            if st.button("✨ New Family? Register Household Profile Here"):
-                st.session_state.register_mode = True
+                    st.error("❌ Authentication Failed. No matching record found inside the Sabha directories.")
+
+            if st.button("← Back to Standard Email Login"):
+                st.session_state.login_mode = "email"
                 st.rerun()
-
-        elif st.session_state.admin_password_mode:
-            admin_pwd_input = st.text_input("Enter Admin Management Password", type="password")
-            if st.button("Verify & Open Workspace"):
-                if admin_pwd_input == db.fetch_admin_config()["password"]:
-                    st.session_state.is_admin = True
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else:
-                    st.error("Invalid Administrative Password Credential.")
-
-        elif st.session_state.otp_sent:
-            otp_token = st.text_input("Enter 6-Digit Code", max_chars=6).strip()
-            if st.button("Verify & Login"):
-                family_lookup = db.fetch_family_by_email(st.session_state.auth_email)
-                if family_lookup:
-                    st.session_state.family_id = family_lookup["family_id"]
-                    st.session_state.logged_in = True
-                    st.rerun()
 
 # -------------------------------------------------------------
 # 2. THE MASTER CONTROL PANEL (ADMINISTRATION PORTAL)
@@ -125,8 +183,10 @@ elif st.session_state.is_admin:
     if st.sidebar.button("Secure Log Out"): logout()
 
     with main_display_viewport:
-        admin_tab = st.tabs(["📋 Pending Approvals Queue", "🔍 Global Directory Matrix", "⚙️ Settings"])
+        admin_tab = st.tabs(["📋 Pending Approvals Queue", "🔍 Global Directory Matrix", "🎂 Age Verification Filter",
+                             "⚙️ Admin Settings"])
 
+        # ---- ADMIN TAB 1: TABLE-BASED AUDIT PIPELINE QUEUE ----
         with admin_tab[0]:
             st.header("Modifications Awaiting Administrative Clearance")
             st.subheader("💳 Staged Subscription Confirmations")
@@ -147,11 +207,9 @@ elif st.session_state.is_admin:
 
                 with st.container(border=True):
                     st.write(f"🏡 **{p_req['head_of_family']}** | Dues Expected: **₹{adm_expected_fee}**")
-                    st.markdown(f"""
-                        <div style='background-color:#f1f3f5; padding:10px 15px; border-radius:6px; margin: 8px 0; font-size:14px; display:inline-block;'>
-                            👥 Roster Breakdown: <b>{adm_h_count} members</b>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background-color:#f1f3f5; padding:8px; border-radius:6px; font-size:14px; display:inline-block;'>👥 Roster Breakdown: <b>{adm_h_count} members</b></div>",
+                        unsafe_allow_html=True)
                     st.write(f"Reference Code: `{p_req['payment_reference']}`")
                     c_p1, c_p2 = st.columns(2)
                     with c_p1:
@@ -164,6 +222,7 @@ elif st.session_state.is_admin:
                             st.rerun()
 
             st.write("---")
+            st.subheader("📝 Pending Profile Core Alterations")
             pending_data = db.fetch_pending_approvals()
             for req in pending_data:
                 req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], req[
@@ -175,7 +234,6 @@ elif st.session_state.is_admin:
                     with c1:
                         if st.button("👍 Approve Change", key=f"appr_{req_id}"):
                             db.process_approval_action(req_id, action, table, payload, target_row_id)
-                            # FORCED LIFECYCLE RE-TRIGGER: Reset target verification flag upon new admin approvals
                             if table == "members":
                                 m_look = db.supabase.table("members").select("family_id").eq("member_id",
                                                                                              target_row_id).execute()
@@ -188,19 +246,164 @@ elif st.session_state.is_admin:
                             db.reject_pending_approval(req_id)
                             st.rerun()
 
+        # ---- ADMIN TAB 2: GLOBAL DIRECTORY SEARCH MATRIX ----
         with admin_tab[1]:
             st.header("Global Directory Master Tracking View")
-            search_q = st.text_input("Type here to search across Head Name, Illam, or Address").strip()
+            search_q = st.text_input("Type here to search across Head Name, Illam, or Address (Press Enter)").strip()
             display_fams = db.fetch_recent_families_global(limit=10) if search_q == "" else db.search_families_global(
                 search_q)
-            for f in display_fams:
-                with st.expander(f"🏡 {f.get('head_of_family')} | ഇല്ലം: {f.get('illam_name')}"):
-                    if st.button("🔓 Force Unlock Roster Fields", key=f"force_unl_{f['family_id']}"):
-                        db.update_family_verification_state(f['family_id'], "Pending Update")
+
+            if not display_fams:
+                st.info("No matching records found.")
+            else:
+                for f in display_fams:
+                    if f["family_id"] == 999999: continue
+                    with st.expander(f"🏡 {f.get('head_of_family')} | ഇല്ലം: {f.get('illam_name')}"):
+                        if not f.get("email_id"):
+                            pre_reg_email = st.text_input("Enter Email to bind to this profile",
+                                                          key=f"pr_em_txt_{f['family_id']}").strip().lower()
+                            if st.button("🔗 Direct Pre-Register & Bind Email", key=f"pr_em_btn_{f['family_id']}"):
+                                if "@" not in pre_reg_email or "." not in pre_reg_email:
+                                    st.error("Invalid email format.")
+                                else:
+                                    db.link_family_email(f['family_id'], pre_reg_email)
+                                    st.success("Email bound successfully!")
+                                    st.rerun()
+                        else:
+                            st.info(f"Registered Login Identifier: **{f['email_id']}**")
+                            adm_unlock_c1, adm_unlock_c2 = st.columns(2)
+                            with adm_unlock_c1:
+                                if st.button("🔄 Reset Linked Email / Open Backdoor", key=f"rst_{f['family_id']}"):
+                                    db.link_family_email(f['family_id'], None)
+                                    st.success("Identity reset completed.")
+                                    st.rerun()
+                            with adm_unlock_c2:
+                                if st.button("🔓 Force Unlock Roster Fields", key=f"force_unl_{f['family_id']}"):
+                                    db.update_family_verification_state(f['family_id'], "Pending Update")
+                                    st.success("Fields unlocked!")
+                                    st.rerun()
+
+                    st.write("---")
+                    with st.form(f"adm_fam_form_{f['family_id']}"):
+                        st.subheader("🛠️ Override Household Header")
+                        a_head = st.text_input("Head Name", value=f["head_of_family"])
+                        a_illam = st.text_input("Illam Name", value=f["illam_name"])
+                        a_goth = st.text_input("Gothram", value=f.get("gothram", ""))
+                        a_addr = st.text_area("Master Address", value=f["address"])
+
+                        if st.form_submit_button("💾 Direct Save Header Changes"):
+                            db.update_family_header(f['family_id'], a_head, a_illam, a_goth, a_addr)
+                            st.success("Header saved directly!")
+                            st.rerun()
+
+        # ---- ADMIN TAB 3: AGE VERIFICATION & DISTRICT SABHA REPORTS (FULLY RESTORED) ----
+        with admin_tab[2]:
+            st.header("Statutory Electoral & District Sabha Calculations")
+            current_year = datetime.date.today().year
+
+            st.subheader("1. Age Calculation Audit (18+)")
+            target_date = st.date_input("Select Reference Cut-off Date", datetime.date.today(), key="voter_date_picker")
+
+            if st.button("Calculate Voter Roll Registry (18+)"):
+                with st.spinner("Executing lookup..."):
+                    voters = auth.calculate_voter_roll(db.fetch_all_members_global(), db.fetch_all_families_global(),
+                                                       target_date)
+                if voters:
+                    st.success(f"Found {len(voters)} members.")
+                    st.dataframe(voters)
+                    output = io.StringIO()
+                    writer = csv.DictWriter(output, fieldnames=voters[0].keys())
+                    writer.writeheader()
+                    writer.writerows(voters)
+                    st.download_button("📥 Download Voter Roll (CSV)", data=output.getvalue(),
+                                       file_name=f"voter_roll_{target_date}.csv", mime="text/csv")
+
+            st.write("---")
+            st.subheader(f"2. District Sabha Yearly Registry ({current_year})")
+            if st.button(f"Generate {current_year} District Sabha Report"):
+                with st.spinner("Compiling structural database report matrix..."):
+                    raw_members = db.fetch_all_members_global()
+                    fam_map = {x["family_id"]: x for x in db.fetch_all_families_global()}
+                    district_report = []
+                    this_year_cutoff = datetime.date(current_year, 3, 31)
+                    last_year_cutoff = datetime.date(current_year - 1, 3, 31)
+
+                    for m in raw_members:
+                        if not m.get("dob"): continue
+                        try:
+                            dob_parsed = datetime.datetime.strptime(str(m["dob"]), "%Y-%m-%d").date()
+                            if (this_year_cutoff - dob_parsed).days / 365.25 < 18.0: continue
+                            status = "New" if (last_year_cutoff - dob_parsed).days / 365.25 < 18.0 else "Existing"
+                            f_info = fam_map.get(m["family_id"], {})
+                            final_address = f_info.get("address", "N/A") if not m.get(
+                                "current_address") or "Same as above" in m.get("current_address", "") else m.get(
+                                "current_address")
+                            district_report.append({
+                                "Name": m["name"],
+                                "DOB": m["dob"],
+                                "Blood Group": m["blood_group"] or "Not Identified",
+                                "Illam Name": f_info.get("illam_name", "N/A"),
+                                "Address": final_address,
+                                "Phone": m["phone"] or "N/A",
+                                "Status": status
+                            })
+                        except:
+                            pass
+                if district_report:
+                    st.success(f"Compiled {len(district_report)} entries.")
+                    st.dataframe(district_report)
+                    output_ds = io.StringIO()
+                    writer_ds = csv.DictWriter(output_ds, fieldnames=district_report[0].keys())
+                    writer_ds.writeheader()
+                    writer_ds.writerows(district_report)
+                    st.download_button(label="📥 Download District Sabha Report (CSV)", data=output_ds.getvalue(),
+                                       file_name=f"district_sabha_{current_year}.csv", mime="text/csv")
+
+        # ---- ADMIN TAB 4: SYSTEM CONFIGS & ACCOUNT CREDENTIALS ----
+        with admin_tab[3]:
+            st.header("Security & Subscription Configuration Settings")
+            current_config = db.fetch_admin_config()
+            st.write("---")
+            st.subheader("🗓️ Annual Institutional Renewal Lifecycle & Rates")
+            verification_state = current_config.get("yearly_verification_active", False)
+
+            with st.form("global_lifecycle_toggle_form"):
+                toggle_switch = st.checkbox("Enable Global Yearly Audit & Subscription Window",
+                                            value=verification_state)
+                col_p1, col_p2, col_p3 = st.columns(3)
+                with col_p1: cfg_base = st.number_input("Base Family Fee (INR)",
+                                                        value=float(current_config.get("base_family_fee", 700)),
+                                                        step=50.0)
+                with col_p2: cfg_thresh = st.number_input("Headcount Limit for Base Fee",
+                                                          value=int(current_config.get("base_member_threshold", 4)),
+                                                          step=1)
+                with col_p3: cfg_add = st.number_input("Fee per Additional Member (INR)",
+                                                       value=float(current_config.get("additional_member_fee", 100)),
+                                                       step=10.0)
+                if st.form_submit_button("Apply Global Changes"):
+                    db.update_global_verification_toggle(toggle_switch, cfg_base, cfg_thresh, cfg_add)
+                    st.success("🔒 Configuration variables updated live!")
+                    st.rerun()
+
+            st.write("---")
+            with st.form("admin_settings_form"):
+                st.subheader("🔑 Modify Core Access Credentials")
+                new_username = st.text_input("Change Admin Username", value=current_config["username"]).strip()
+                new_password = st.text_input("Set New Admin Password", type="password").strip()
+                confirm_password = st.text_input("Confirm New Admin Password", type="password").strip()
+
+                if st.form_submit_button("Update Access Credentials"):
+                    if new_username == "" or new_password == "":
+                        st.error("Fields cannot be blank.")
+                    elif new_password != confirm_password:
+                        st.error("❌ Password confirmation mismatch!")
+                    else:
+                        db.admin_update_credentials(new_username, new_password)
+                        st.success("🔒 System credentials updated!")
                         st.rerun()
 
 # -------------------------------------------------------------
-# 3. STANDARD USER WORKSPACE (PERMANENTLY EDITABLE ROSTERS)
+# 3. STANDARD USER WORKSPACE (PERMANENTLY UNLOCKED)
 # -------------------------------------------------------------
 else:
     f_id = st.session_state.family_id
@@ -214,7 +417,6 @@ else:
     members_data = db.fetch_family_members(f_id)
     v_status = family_data.get("verification_status", "Pending Update")
 
-    # Dynamic Pricing Calculations
     member_count = len(members_data) if members_data else 1
     active_fee = int(admin_cfg["base_family_fee"]) if member_count <= int(admin_cfg["base_member_threshold"]) else int(
         admin_cfg["base_family_fee"]) + ((member_count - int(admin_cfg["base_member_threshold"])) * int(
@@ -227,12 +429,10 @@ else:
         st.info(notification_msg)
         if st.button("Dismiss Notification"): db.clear_user_notification(f_id); st.rerun()
 
-    # Shared Operational States: Profile forms NEVER hard-lock out
     is_disabled = False
-
     user_tabs = st.tabs(["🏡 Household Profile", "👥 Family Members Roster", "📋 Verify & Settle Dues"])
 
-    # ---- TAB 1: HOUSEHOLD IDENTITY CORE HEADER ----
+    # ---- TAB 1: HOUSEHOLD IDENTITY HEADER ----
     with user_tabs[0]:
         st.write("")
         with st.form("edit_family_header_modular_form"):
@@ -242,10 +442,10 @@ else:
             h_addr = st.text_area("മേൽവിലാസം (Address)", value=family_data.get('address', ''))
             if st.form_submit_button("💾 Save Household Information"):
                 db.update_family_header(f_id, h_head.strip(), h_illam.strip(), h_goth.strip(), h_addr.strip())
-                st.success("Master header variables updated successfully!")
+                st.success("Household information updated successfully!")
                 st.rerun()
 
-    # ---- TAB 2: FUNCTIONAL MEMBERS MANAGEMENT LAYER ----
+    # ---- TAB 2: MEMBERS MANAGEMENT ROSTER ----
     with user_tabs[1]:
         st.write("")
         header_address = family_data.get('address', '').strip()
@@ -289,15 +489,18 @@ else:
                                     m.get('current_address', '').strip() == header_address or m.get('current_address',
                                                                                                     '').strip() == "")
 
-                        # RADIO RELOCATION INTERFACE TRIGGER
                         m_addr_sel = st.radio("Current Address Context Selector",
                                               options=["Same as Household Address", "Custom Address"],
                                               index=0 if is_same_initial else 1, key=f"u_rad_{m_id}")
-                        m_caddr = st.text_area("Enter Custom Current Address",
-                                               value=m.get('current_address', '') if not is_same_initial else "",
-                                               key=f"u_txa_{m_id}")
 
-                        # INLINE REMOVAL OVERRIDE INTERLOCK
+                        if m_addr_sel == "Custom Address":
+                            m_caddr = st.text_area("Enter Custom Current Address",
+                                                   value=m.get('current_address', '') if not is_same_initial else "",
+                                                   key=f"u_txa_{m_id}")
+                        else:
+                            m_caddr = ""
+
+                        st.write("")
                         m_delete_tick = st.checkbox("🗑️ Request Deletion of this Member Record",
                                                     key=f"u_deltick_{m_id}")
 
@@ -332,9 +535,8 @@ else:
                                 "adhaar": clean_a if clean_a != "" else None, "current_address": final_m_addr
                             }, target_id=r["member_id"])
 
-                # RESET TRIGGER: Instantly drops verification state back upon executing any structural form updates
                 db.update_family_verification_state(f_id, "Pending Update")
-                st.success("Roster adjustments captured! Verification status refreshed.")
+                st.success("Roster adjustments captured! Please complete verification checklist inside Tab 3.")
                 st.rerun()
 
         with st.expander("➕ Request Adding a New Member to this Household"):
@@ -369,7 +571,7 @@ else:
                     st.success("Staged in the admin queue!")
                     st.rerun()
 
-    # ---- TAB 3: HIGHLY INTUITIVE USER-FRIENDLY RECONCILIATION ENGINE ----
+    # ---- TAB 3: THE SEPARATE PROGRESSIVE VERIFICATION TUNNEL PANEL ----
     with user_tabs[2]:
         st.write("")
         if not is_audit_window:
@@ -379,7 +581,6 @@ else:
             is_user_stuck_in_queue = db.check_if_user_has_pending_requests(st.session_state.auth_email)
             is_awaiting_payment_clearance = (v_status == "Payment Submitted")
 
-            # PROGRESS ROUTE CONTAINER STRIP MAP
             st.markdown("### 🗺️ Your Progress Map")
             if is_user_stuck_in_queue:
                 st.markdown(
@@ -404,7 +605,6 @@ else:
 
             st.write("---")
 
-            # SCREEN LOCK TRIGGERS
             if is_user_stuck_in_queue:
                 st.markdown("#### ⏳ Verification Paused Dynamically")
                 st.warning(
@@ -418,7 +618,7 @@ else:
             elif v_status == "Approved":
                 st.balloons()
                 st.markdown("### 📥 Download Your Official Payment Receipt")
-                st.success("Thank you! Your household profile has been cleared.")
+                st.success("Thank you! Your yearly membership subscription has been cleared.")
                 current_year = datetime.date.today().year
                 receipt_template = f"====================================================\n          YOGAKSHEMASABHA CENTRAL TREASURY\n                OFFICIAL PAYMENT RECEIPT\n====================================================\nReceipt Date: {datetime.date.today().strftime('%d-%B-%Y')}\nHousehold Unit: {family_data.get('head_of_family')}\nIllam Name: {family_data.get('illam_name')}\nTotal Members: {member_count} Profile Logs Saved\nAmount Paid: INR {active_fee}.00\nStatus: CLEAR / FULLY VERIFIED CORPS\n===================================================="
                 st.code(receipt_template, language="text")
@@ -426,7 +626,6 @@ else:
                                    file_name=f"sabha_receipt_{f_id}.txt", mime="text/plain")
 
             else:
-                # STATIC READ-ONLY VERIFICATION VIEW SCREEN
                 st.markdown("### 📋 Step 1: Review Your Final Family Summary")
                 st.caption(
                     "Please check this official summary. If anything looks incorrect, simply click **Tab 1** or **Tab 2** above to change it. Your corrections will show up here instantly.")
@@ -438,11 +637,11 @@ else:
                         unsafe_allow_html=True)
                 with b_col2:
                     st.markdown(
-                        f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #0068c9;'><b>🏘️ Illam Unit Name:</b><br><span style='font-size:18px; font-weight:700;'>{family_data.get('illam_name')}</span></div>",
+                        f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #0068c9;'><b>🏘️ Illam Name:</b><br><span style='font-size:18px; font-weight:700;'>{family_data.get('illam_name')}</span></div>",
                         unsafe_allow_html=True)
                 with b_col3:
                     st.markdown(
-                        f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #29b6f6;'><b>👥 Registered Headcount:</b><br><span style='font-size:18px; font-weight:700;'>{member_count} Members</span></div>",
+                        f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #29b6f6;'><b>👥 Roster Headcount:</b><br><span style='font-size:18px; font-weight:700;'>{member_count} Members</span></div>",
                         unsafe_allow_html=True)
 
                 st.write("")
@@ -464,7 +663,7 @@ else:
                     if st.button("👉 YES, everything listed above is correct! Show payment details.", type="primary",
                                  use_container_width=True):
                         db.update_family_verification_state(f_id, "Data Verified")
-                        st.success("Roster verified! Gateway checkout unlocked below.")
+                        st.success("Roster verified! Checkout options unlocked below.")
                         st.rerun()
 
                 elif v_status == "Data Verified":
@@ -479,10 +678,7 @@ else:
                             if admin_cfg.get("upi_qr_url"):
                                 st.image(admin_cfg["upi_qr_url"], use_container_width=True)
                             else:
-                                st.warning("⚠️ Official QR asset un-uploaded.")
-                            st.markdown(
-                                "<p style='text-align:center; font-size:12px; color:#6c757d; margin-top:5px;'>Open Google Pay, PhonePe, Bhim, or PayTM on your mobile phone and hold it up to scan this QR box.</p>",
-                                unsafe_allow_html=True)
+                                st.warning("⚠️ Official QR asset unavailable.")
 
                     with pay_layout_col2:
                         st.markdown(f"""
@@ -497,10 +693,6 @@ else:
                                        upi_string, use_container_width=True)
 
                         st.write("---")
-                        st.markdown("#### ✍️ After paying, paste your receipt number below:")
-                        st.write(
-                            "Once your mobile payment goes through successfully, please type that 12-digit transaction number into this box below to let the treasurer clear your account:")
-
                         with st.form("payment_submission_form"):
                             bank_ref_id = st.text_input("Type your 12-digit payment reference number here:").strip()
                             if st.form_submit_button("🔒 Click Here to Send Reference Number to Treasurer",
