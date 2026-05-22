@@ -65,9 +65,9 @@ def fetch_recent_families_global(limit=10):
     try:
         # Pulls only the top 10 rows from Supabase, ordered by their ID or creation
         # (If you have an updated_at column, replace family_id with updated_at)
-        return supabase.table("families").select("*").order("family_id", desc=True).limit(limit).execute().data
+        return supabase.table("families").select("*").order("updated_at", desc=True).limit(limit).execute().data
     except Exception:
-        return supabase.table("families").select("*").order("family_id", desc=True).limit(limit).execute().data
+        return supabase.table("families").select("*").order("updated_at", desc=True).limit(limit).execute().data
 
 def search_families_global(search_term):
     try:
@@ -101,17 +101,76 @@ def fetch_pending_approvals():
     return supabase.table("pending_approvals").select("*").order("created_at").execute().data
 
 
-def process_approval_action(req_id, action, table, payload, target_id):
-    if action == "INSERT":
-        supabase.table(table).insert(payload).execute()
-    elif action == "UPDATE":
-        id_col = "family_id" if table == "families" else "member_id"
-        supabase.table(table).update(payload).eq(id_col, target_id).execute()
-    elif action == "DELETE":
-        id_col = "family_id" if table == "families" else "member_id"
-        supabase.table(table).delete().eq(id_col, target_id).execute()
+def process_approval_action(approval_id, action, table, payload, target_id=null):
+    """
+    Executes staged modification requests from the pending queue into active production records.
+    Handles INSERT, UPDATE, and DELETE triggers across both members and families structures.
+    """
+    try:
+        # -------------------------------------------------------------
+        # PATHWAY A: NEW HOUSEHOLD REGISTRATION PIPELINE
+        # -------------------------------------------------------------
+        if table == "families" and action == "INSERT":
+            # 1. Insert the master household header record
+            fam_res = supabase.table("families").insert({
+                "head_of_family": payload.get("head_of_family"),
+                "illam_name": payload.get("illam_name"),
+                "gothram": payload.get("gothram"),
+                "address": payload.get("address"),
+                "email_id": payload.get("email_id")
+            }).execute()
 
-    supabase.table("pending_approvals").delete().eq("approval_id", req_id).execute()
+            # 2. Extract the newly minted family_id sequence and provision the head as member #1
+            if fam_res.data:
+                new_f_id = fam_res.data[0]["family_id"]
+
+                supabase.table("members").insert({
+                    "family_id": new_f_id,
+                    "name": payload.get("head_of_family"),
+                    "relation": "Head of Family",
+                    "dob": payload.get("head_dob"),
+                    "phone": payload.get("head_phone"),
+                    "blood_group": payload.get("blood_group") if payload.get(
+                        "blood_group") != "Not Identified" else None,
+                    "current_address": payload.get("address")  # Inherits master home address immediately
+                }).execute()
+
+        # -------------------------------------------------------------
+        # PATHWAY B: STANDARD MEMBER REGISTRATION PIPELINE
+        # -------------------------------------------------------------
+        elif table == "members" and action == "INSERT":
+            supabase.table("members").insert(payload).execute()
+
+        # -------------------------------------------------------------
+        # PATHWAY C: DATA UPDATES & MODIFICATION OVERRIDES
+        # -------------------------------------------------------------
+        elif action == "UPDATE":
+            if table == "families":
+                supabase.table("families").update(payload).eq("family_id", target_id).execute()
+            elif table == "members":
+                supabase.table("members").update(payload).eq("member_id", target_id).execute()
+
+        # -------------------------------------------------------------
+        # PATHWAY D: PROFILE DELETIONS & RECORD DROPS
+        # -------------------------------------------------------------
+        elif action == "DELETE":
+            if table == "members":
+                supabase.table("members").delete().eq("member_id", target_id).execute()
+            elif table == "families":
+                # Clean drop: Remove all children members tied to the household first to protect relational integrity
+                supabase.table("members").delete().eq("family_id", target_id).execute()
+                supabase.table("families").delete().eq("family_id", target_id).execute()
+
+        # -------------------------------------------------------------
+        # FINAL CLEANUP: Purge the handled ticket from the staging queue
+        # -------------------------------------------------------------
+        supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
+        return True
+
+    except Exception as e:
+        # Fallback safeguard logs error to terminal context for debugging steps
+        print(f"Relational Processing Execution Failure: {str(e)}")
+        raise e
 
 
 def reject_pending_approval(req_id):
@@ -156,3 +215,15 @@ def fetch_district_sabha_report_data():
         return supabase.table("members").select("name, dob, blood_group, current_address, phone, created_at, family_id").execute().data
     except Exception:
         return supabase.table("members").select("name, dob, blood_group, current_address, phone, created_at, family_id").execute().data
+
+def submit_new_family_registration(email, payload):
+    try:
+        # Routes the entire household profile setup into the admin queue as an INSERT
+        return supabase.table("pending_approvals").insert({
+            "target_table": "families",
+            "action_type": "INSERT",
+            "requested_by": email,
+            "change_payload": payload
+        }).execute()
+    except Exception as e:
+        print(f"Queue Error: {str(e)}")
