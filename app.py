@@ -19,10 +19,6 @@ def validate_aadhaar(aadhaar_str):
         return True, cleaned
     return False, None
 
-# Simple callback trigger to force a layout refresh inside forms
-def refresh_form_layout():
-    pass
-
 # Initialize Session State
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -167,36 +163,35 @@ else:
             m_id = member['member_id']
             
             with st.expander(f"👤 {member['name']} ({member['relation'] or 'Member'})", expanded=False):
-                with st.form(f"update_member_{m_id}"):
+                # Using st.container avoids the "Missing Submit Button" warning entirely
+                with st.container():
                     col1, col2 = st.columns(2)
                     with col1:
-                        m_name = st.text_input("Name *", value=member.get('name', ''))
-                        m_relation = st.text_input("Relation *", value=member.get('relation', ''))
-                        m_dob = st.text_input("DOB * (YYYY-MM-DD)", value=str(member.get('dob', '')) if member.get('dob') else '')
+                        m_name = st.text_input("Name *", value=member.get('name', ''), key=f"name_{m_id}")
+                        m_relation = st.text_input("Relation *", value=member.get('relation', ''), key=f"rel_{m_id}")
+                        m_dob = st.text_input("DOB * (YYYY-MM-DD)", value=str(member.get('dob', '')) if member.get('dob') else '', key=f"dob_{m_id}")
                         
                         curr_bg = member.get('blood_group', '').strip()
                         bg_index = BLOOD_GROUPS.index(curr_bg) if curr_bg in BLOOD_GROUPS else 0
                         m_blood = st.selectbox("Blood Group", options=BLOOD_GROUPS, index=bg_index, key=f"bg_edit_{m_id}")
                         
                     with col2:
-                        m_phone = st.text_input("Phone Number", value=str(member.get('phone', '')) if member.get('phone') else '')
-                        m_email = st.text_input("Email", value=member.get('email', ''))
-                        m_qual = st.text_input("Qualification", value=member.get('qualification', ''))
-                        m_job = st.text_input("Job / Occupation", value=member.get('job', ''))
+                        m_phone = st.text_input("Phone Number", value=str(member.get('phone', '')) if member.get('phone') else '', key=f"phone_{m_id}")
+                        m_email = st.text_input("Email", value=member.get('email', ''), key=f"email_{m_id}")
+                        m_qual = st.text_input("Qualification", value=member.get('qualification', ''), key=f"qual_{m_id}")
+                        m_job = st.text_input("Job / Occupation", value=member.get('job', ''), key=f"job_{m_id}")
                     
                     m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)", value=str(member.get('adhaar', '')) if member.get('adhaar') else '', key=f"adhaar_edit_{m_id}")
                     
-                    # --- INSIDE THE FORM ADDRESS CONFIGURATION ---
+                    # Inside container radio logic triggers clean, dynamic, warning-free updates
                     db_addr = member.get('current_address', '').strip()
                     is_same_initial = (db_addr == header_address or db_addr == "")
                     
-                    # we add on_change callback to force the form container to refresh visual state immediately
                     m_addr_selection = st.radio(
                         "Current Address Selection", 
                         options=["Same as above", "Not same as above"], 
                         index=0 if is_same_initial else 1,
-                        key=f"addr_radio_{m_id}",
-                        on_change=refresh_form_layout
+                        key=f"addr_radio_{m_id}"
                     )
                     
                     m_curr_addr = ""
@@ -204,8 +199,8 @@ else:
                         initial_custom_val = "" if is_same_initial else db_addr
                         m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
                     
-                    if st.form_submit_button(f"Save Profile Changes for {member['name']}"):
-                        # Validation checks
+                    # Regular action buttons
+                    if st.button(f"Save Profile Changes for {member['name']}", key=f"save_btn_{m_id}"):
                         if m_name.strip() == "" or m_relation.strip() == "" or m_dob.strip() == "":
                             st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                         else:
@@ -242,33 +237,31 @@ else:
     # ---- ADD NEW MEMBER FORM ----
     st.header("➕ Add New Family Member")
     with st.expander("Register a new member for this family"):
-        with st.form("add_new_member_form", clear_on_submit=True):
-            new_name = st.text_input("Full Name *")
-            new_relation = st.text_input("Relation * (e.g., Wife, Son, Daughter)")
-            new_dob = st.text_input("DOB * (YYYY-MM-DD)")
+        with st.container():
+            new_name = st.text_input("Full Name *", key="new_name")
+            new_relation = st.text_input("Relation * (e.g., Wife, Son, Daughter)", key="new_rel")
+            new_dob = st.text_input("DOB * (YYYY-MM-DD)", key="new_dob")
             
-            new_blood = st.selectbox("Blood Group", options=BLOOD_GROUPS, index=0)
+            new_blood = st.selectbox("Blood Group", options=BLOOD_GROUPS, index=0, key="new_bg")
             
-            new_phone = st.text_input("Phone Number")
-            new_email = st.text_input("Email Address")
-            new_qual = st.text_input("Qualification")
-            new_job = st.text_input("Job / Profession")
-            new_adhaar = st.text_input("Aadhaar Number (12 numeric digits)")
+            new_phone = st.text_input("Phone Number", key="new_phone")
+            new_email = st.text_input("Email Address", key="new_email")
+            new_qual = st.text_input("Qualification", key="new_qual")
+            new_job = st.text_input("Job / Profession", key="new_job")
+            new_adhaar = st.text_input("Aadhaar Number (12 numeric digits)", key="new_adhaar")
             
-            # --- INSIDE THE NEW FORM ADDRESS CONFIGURATION ---
             new_addr_selection = st.radio(
                 "Current Address Selection", 
                 options=["Same as above", "Not same as above"], 
                 index=0,
-                key="new_member_addr_radio",
-                on_change=refresh_form_layout
+                key="new_member_addr_radio"
             )
             
             new_custom_addr = ""
             if new_addr_selection == "Not same as above":
                 new_custom_addr = st.text_area("Enter Custom Current Address", value="", key="new_member_custom_addr")
             
-            if st.form_submit_button("Add Member"):
+            if st.button("Add Member", key="new_member_submit"):
                 if new_name.strip() == "" or new_relation.strip() == "" or new_dob.strip() == "":
                     st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                 else:
