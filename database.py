@@ -130,12 +130,9 @@ def process_approval_action(approval_id, action, table, payload, target_id=None)
             if fam_res.data:
                 new_f_id = fam_res.data[0]["family_id"]
                 supabase.table("members").insert({
-                    "family_id": new_f_id,
-                    "name": payload.get("head_of_family"),
-                    "relation": "Head of Family",
-                    "dob": payload.get("head_dob"),
-                    "phone": payload.get("head_phone"),
-                    "current_address": payload.get("address")
+                    "family_id": new_f_id, "name": payload.get("head_of_family"),
+                    "relation": "Head of Family", "dob": payload.get("head_dob"),
+                    "phone": payload.get("head_phone"), "current_address": payload.get("address")
                 }).execute()
 
         elif table == "members" and action == "INSERT":
@@ -154,7 +151,6 @@ def process_approval_action(approval_id, action, table, payload, target_id=None)
                 supabase.table("members").delete().eq("family_id", target_id).execute()
                 supabase.table("families").delete().eq("family_id", target_id).execute()
 
-        # Push notification block leaves operational verification status completely un-overwritten
         if family_email:
             supabase.table("families").update({
                 "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee."
