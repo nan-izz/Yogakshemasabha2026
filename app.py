@@ -154,7 +154,7 @@ else:
     else:
         st.info(f"🔒 Registered Login Identifier: **{current_email}**")
 
-    # ---- EDIT/DELETE EXISTING MEMBERS ----
+# ---- EDIT/DELETE EXISTING MEMBERS ----
     st.header("👥 Registered Family Members")
     members_data = supabase.table("members").select("*").eq("family_id", f_id).order("member_id").execute().data
     
@@ -199,8 +199,8 @@ else:
                         initial_custom_val = "" if is_same_initial else db_addr
                         m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
                     
-                    # Regular action buttons
-                   if st.button(f"Save Profile Changes for {member['name']}", key=f"save_btn_{m_id}"):
+                    # Regular action buttons - alignment perfectly matched to the outer block indentation level
+                    if st.button(f"Save Profile Changes for {member['name']}", key=f"save_btn_{m_id}"):
                         if m_name.strip() == "" or m_relation.strip() == "" or m_dob.strip() == "":
                             st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                         else:
@@ -212,7 +212,6 @@ else:
                                 final_addr = header_address if m_addr_selection == "Same as above" else m_curr_addr.strip()
                                 final_bg = None if m_blood == 'Not Identified' else m_blood
                                 
-                                # Safe stripping logic that checks for None/Null values first
                                 supabase.table("members").update({
                                     "name": m_name.strip(),
                                     "relation": m_relation.strip(),
@@ -234,7 +233,6 @@ else:
                     st.rerun()
     else:
         st.info("No members currently mapped to this profile.")
-
     # ---- ADD NEW MEMBER FORM ----
     st.header("➕ Add New Family Member")
     with st.expander("Register a new member for this family"):
