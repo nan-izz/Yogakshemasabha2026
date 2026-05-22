@@ -102,12 +102,22 @@ def verify_backdoor_details(head, illam):
                                                                                         illam.strip()).execute().data
 
 
+def check_if_user_has_pending_requests(email):
+    res = supabase.table("pending_approvals").select("approval_id").eq("requested_by", email.strip().lower()).execute()
+    return len(res.data) > 0
+
+
 # -------------------------------------------------------------
-# MASTER WRITE ENGINE (WITH AUTOMATIC CACHE CLEAR CONSTRAINTS)
+# MASTER TRANSACTION WRITE ENGINE (WITH AUTOMATIC CACHE FLUSHING)
 # -------------------------------------------------------------
 
 def process_approval_action(approval_id, action, table, payload, target_id=None):
     try:
+        family_email = None
+        req_lookup = supabase.table("pending_approvals").select("requested_by").eq("approval_id", approval_id).execute()
+        if req_lookup.data:
+            family_email = req_lookup.data[0].get("requested_by")
+
         if table == "families" and action == "INSERT":
             fam_res = supabase.table("families").insert({
                 "head_of_family": payload.get("head_of_family"),
@@ -144,8 +154,14 @@ def process_approval_action(approval_id, action, table, payload, target_id=None)
                 supabase.table("members").delete().eq("family_id", target_id).execute()
                 supabase.table("families").delete().eq("family_id", target_id).execute()
 
+        # Push success message to user context
+        if family_email:
+            supabase.table("families").update({
+                "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee."
+            }).eq("email_id", family_email).execute()
+
         supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
-        st.cache_data.clear()  # Flush server memory immediately
+        st.cache_data.clear()  # Flush server memory layout immediately
         return True
     except Exception as e:
         print(f"Relational Processing Execution Failure: {str(e)}")
@@ -167,7 +183,27 @@ def submit_new_family_registration(email, payload):
 
 
 def reject_pending_approval(approval_id):
-    return supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
+    req_lookup = supabase.table("pending_approvals").select("requested_by, action_type, target_table").eq("approval_id",
+                                                                                                          approval_id).execute()
+    if req_lookup.data:
+        family_email = req_lookup.data[0].get("requested_by")
+        action = req_lookup.data[0].get("action_type")
+        table = req_lookup.data[0].get("target_table")
+
+        if family_email:
+            supabase.table("families").update({
+                "admin_notification": f"❌ Your recent request to {action.lower()} records inside '{table}' was REJECTED by the managing committee."
+            }).eq("email_id", family_email).execute()
+
+    res = supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
+    st.cache_data.clear()
+    return res
+
+
+def clear_user_notification(family_id):
+    res = supabase.table("families").update({"admin_notification": None}).eq("family_id", family_id).execute()
+    st.cache_data.clear()
+    return res
 
 
 def update_family_header(family_id, head, illam, gothram, address):
