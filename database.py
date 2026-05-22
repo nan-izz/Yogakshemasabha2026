@@ -6,10 +6,8 @@ from supabase import create_client, Client
 url = os.environ.get("SUPABASE_URL") or os.environ.get("supabase_url")
 key = os.environ.get("SUPABASE_KEY") or os.environ.get("supabase_key")
 
-# Fallback check for local development using Streamlit secrets
 if not url:
     import streamlit as st
-
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
 
@@ -19,8 +17,11 @@ supabase: Client = create_client(url, key)
 def fetch_admin_config():
     try:
         return supabase.table("admin_config").select("*").eq("id", 1).execute().data[0]
-    except:
-        return {"username": "sabhaadmin", "password": "admin123"}
+    except Exception:
+        try:
+            return supabase.table("admin_config").select("*").eq("id", 1).execute().data[0]
+        except:
+            return {"username": "sabhaadmin", "password": "admin123"}
 
 
 def check_family_email_exists(email):
@@ -60,12 +61,18 @@ def fetch_family_members(family_id):
     return supabase.table("members").select("*").eq("family_id", family_id).order("member_id").execute().data
 
 
-def fetch_all_members_global():
-    return supabase.table("members").select("name, relation, dob, phone, family_id").execute().data
-
-
 def fetch_all_families_global():
-    return supabase.table("families").select("*").order("head_of_family").execute().data
+    try:
+        return supabase.table("families").select("*").order("head_of_family").execute().data
+    except Exception:
+        # If the server abruptly dropped the HTTP/2 stream, retry the connection instantly
+        return supabase.table("families").select("*").order("head_of_family").execute().data
+
+def fetch_all_members_global():
+    try:
+        return supabase.table("members").select("name, relation, dob, phone, family_id").execute().data
+    except Exception:
+        return supabase.table("members").select("name, relation, dob, phone, family_id").execute().data
 
 
 def submit_pending_approval(table, action, email, payload, target_id=None):
