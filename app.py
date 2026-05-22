@@ -7,7 +7,7 @@ import io
 import database as db
 import auth
 
-st.set_page_index = "wide"
+st.set_page_config(layout="wide")
 
 # Initialize Session State Variables
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -31,9 +31,9 @@ def logout():
 
 
 # -------------------------------------------------------------
-# APPLICATION ENTRY LAYER (LOGINS & IDENTITIES)
+# 1. IDENTITY AUTHENTICATION ENGINE (ISOLATED INTERFACE)
 # -------------------------------------------------------------
-if not st.session_state.logged_in:
+def render_login_screen():
     st.title("Yogakshemasabha Portal")
 
     if st.session_state.login_mode == "email":
@@ -68,6 +68,7 @@ if not st.session_state.logged_in:
                 st.session_state.login_mode = "backdoor"
                 st.rerun()
 
+        # ADMIN ROUTE: PASSWORD ENTRY
         elif st.session_state.admin_password_mode:
             st.info(f"🔑 Administrator Portal Access: **{st.session_state.auth_email}**")
             admin_pwd_input = st.text_input("Enter Admin Management Password", type="password")
@@ -87,6 +88,7 @@ if not st.session_state.logged_in:
                     st.session_state.auth_email = None
                     st.rerun()
 
+        # FAMILY ROUTE: 6-DIGIT OTP ENTRY
         elif st.session_state.otp_sent:
             st.info(f"Logging in as: **{st.session_state.auth_email}**")
             otp_token = st.text_input("Enter 6-Digit Code", max_chars=6).strip()
@@ -125,10 +127,11 @@ if not st.session_state.logged_in:
             st.session_state.login_mode = "email"
             st.rerun()
 
+
 # -------------------------------------------------------------
-# PRODUCTION MANAGEMENT LAYER (THE ADMIN ENVIRONMENT)
+# 2. THE ADVANCED CONTROL CENTER (ADMINISTRATION PORTAL)
 # -------------------------------------------------------------
-elif st.session_state.is_admin:
+def render_admin_workspace():
     st.sidebar.title("🛡️ Admin Workspace")
     if st.sidebar.button("Secure Log Out"): logout()
 
@@ -301,10 +304,11 @@ elif st.session_state.is_admin:
                     st.success("🔒 System credentials updated!")
                     st.rerun()
 
+
 # -------------------------------------------------------------
-# STANDARD USER PORTAL DASHBOARD (RE-ROUTING FIELDS VIA PAYLOAD QUEUES)
+# 3. STANDARD USER / HOUSEHOLD PROFILE DASHBOARD
 # -------------------------------------------------------------
-else:
+def render_user_dashboard():
     f_id = st.session_state.family_id
     st.sidebar.title("Navigation")
     if st.sidebar.button("Secure Log Out"): logout()
@@ -450,3 +454,14 @@ else:
                             "current_address": header_address if new_addr_selection == "Same as above" else new_custom_addr.strip()
                         })
                         st.success("📩 Registration safely routed to the committee queue!")
+
+
+# -------------------------------------------------------------
+# 4. EXCLUSIVE ROUTER ENGINE CONTROLLER
+# -------------------------------------------------------------
+if not st.session_state.logged_in:
+    render_login_screen()
+elif st.session_state.is_admin:
+    render_admin_workspace()
+else:
+    render_user_dashboard()
