@@ -108,7 +108,7 @@ def check_if_user_has_pending_requests(email):
 
 
 # -------------------------------------------------------------
-# MASTER TRANSACTION WRITE ENGINE (WITH AUTOMATIC CACHE FLUSHING)
+# MASTER TRANSACTION WRITE ENGINE (AUTOMATIC STATE RESET RESET EXECUTIONS)
 # -------------------------------------------------------------
 
 def process_approval_action(approval_id, action, table, payload, target_id=None):
@@ -154,14 +154,15 @@ def process_approval_action(approval_id, action, table, payload, target_id=None)
                 supabase.table("members").delete().eq("family_id", target_id).execute()
                 supabase.table("families").delete().eq("family_id", target_id).execute()
 
-        # Push success message to user context
+        # Push success message & reset workflow verification state to re-enable editing layout
         if family_email:
             supabase.table("families").update({
-                "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee."
+                "verification_status": "Pending Update",
+                "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee. Your profile dashboard is now unlocked for updates."
             }).eq("email_id", family_email).execute()
 
         supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
-        st.cache_data.clear()  # Flush server memory layout immediately
+        st.cache_data.clear()
         return True
     except Exception as e:
         print(f"Relational Processing Execution Failure: {str(e)}")
@@ -191,8 +192,10 @@ def reject_pending_approval(approval_id):
         table = req_lookup.data[0].get("target_table")
 
         if family_email:
+            # Rejection message pushes & returns status to editable structure
             supabase.table("families").update({
-                "admin_notification": f"❌ Your recent request to {action.lower()} records inside '{table}' was REJECTED by the managing committee."
+                "verification_status": "Pending Update",
+                "admin_notification": f"❌ Your recent request to {action.lower()} records inside '{table}' was REJECTED by the managing committee. Please correct the parameters and resubmit."
             }).eq("email_id", family_email).execute()
 
     res = supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()

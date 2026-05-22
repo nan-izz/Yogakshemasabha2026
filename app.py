@@ -357,14 +357,17 @@ elif st.session_state.is_admin:
                             a_illam = st.text_input("Illam Name", value=f["illam_name"])
                             a_goth = st.text_input("Gothram", value=f.get("gothram", ""))
                             a_addr = st.text_area("Master Address", value=f["address"])
+
                             b_cols = st.columns([4, 1])
                             with b_cols[0]:
-                                if f.form_submit_button("💾 Direct Save Header Changes"):
+                                # FIXED: Converted from custom variable prefix call to native Streamlit namespace
+                                if st.form_submit_button("💾 Direct Save Header Changes"):
                                     db.update_family_header(f['family_id'], a_head, a_illam, a_goth, a_addr)
                                     st.success("Header saved directly!")
                                     st.rerun()
                             with b_cols[1]:
-                                if f.form_submit_button("❌ Drop Household"):
+                                # FIXED: Converted from custom variable prefix call to native Streamlit namespace
+                                if st.form_submit_button("❌ Drop Household"):
                                     db.admin_direct_delete_family(f['family_id'])
                                     st.warning("Household entry dropped!")
                                     st.rerun()
@@ -392,7 +395,8 @@ elif st.session_state.is_admin:
 
                                     m_cols = st.columns([4, 1])
                                     with m_cols[0]:
-                                        if f.form_submit_button("💾 Save Member Direct"):
+                                        # FIXED: Converted to native Streamlit namespace
+                                        if st.form_submit_button("💾 Save Member Direct"):
                                             is_valid, clean_a = auth.validate_aadhaar(ma_adh)
                                             if ma_name.strip() == "" or ma_rel.strip() == "" or ma_dob.strip() == "":
                                                 st.error("Fields marked with * are mandatory parameters.")
@@ -413,7 +417,8 @@ elif st.session_state.is_admin:
                                                 st.success("Member saved!")
                                                 st.rerun()
                                     with m_cols[1]:
-                                        if f.form_submit_button("❌ Drop"):
+                                        # FIXED: Converted to native Streamlit namespace
+                                        if st.form_submit_button("❌ Drop"):
                                             db.admin_direct_delete_member(m['member_id'])
                                             st.warning("Member dropped!")
                                             st.rerun()
@@ -535,7 +540,7 @@ elif st.session_state.is_admin:
                         st.rerun()
 
 # -------------------------------------------------------------
-# 3. STANDARD USER WORKSPACE (MODULAR TABBED INTERFACE)
+# 3. STANDARD USER WORKSPACE (WITH AUTOMATED LOCKS & BANNERS)
 # -------------------------------------------------------------
 else:
     f_id = st.session_state.family_id
@@ -549,7 +554,7 @@ else:
     members_data = db.fetch_family_members(f_id)
     v_status = family_data.get("verification_status", "Pending Update")
 
-    # Dynamic Pricing Logic Execution
+    # Dynamic Pricing Calculations
     member_count = len(members_data) if members_data else 1
     db_base_fee = admin_cfg.get("base_family_fee", 700)
     db_threshold = admin_cfg.get("base_member_threshold", 4)
@@ -579,6 +584,7 @@ else:
         is_disabled = True
         is_payment_allowed = False
     else:
+        # Automatic lifecycle un-binder: if admin processed the request, fields unlock immediately here!
         is_disabled = (v_status != "Pending Update")
         is_payment_allowed = (v_status == "Data Verified")
 
@@ -595,10 +601,9 @@ else:
             st.info("⏳ Reference token logged. Awaiting committee reconciliation check.")
         elif v_status == "Approved":
             st.balloons()
-            st.success(
-                "🎉 Registration and annual subscription approved! Download your printable receipt in the payment tab.")
+            st.success("🎉 Annual subscription approved! Download your printable receipt in the payment tab.")
 
-    # BUILD MODULAR STANDARD USER WORKSPACE TABS
+    # BUILD MODULAR WORKSPACE TABS
     user_tabs = st.tabs(["🏡 Household Profile", "👥 Family Members Roster", "💳 Settle Subscription"])
 
     # ---- TAB 1: HOUSEHOLD IDENTITY CORE HEADER ----
@@ -635,8 +640,7 @@ else:
             member_references = []
 
             if not members_data:
-                st.info(
-                    "ℹ️ No family members are currently mapped to this household profile. Use the expander track below to register members.")
+                st.info("ℹ️ No family members are currently mapped to this household profile.")
             else:
                 for m in members_data:
                     m_id = m['member_id']
@@ -648,7 +652,6 @@ else:
                                                    disabled=is_disabled)
                             m_rel = st.text_input("Relation *", value=m.get('relation', ''), key=f"u_rl_{m_id}",
                                                   disabled=is_disabled)
-
                             try:
                                 parsed_dob = datetime.datetime.strptime(str(m.get('dob', '1990-01-01')),
                                                                         "%Y-%m-%d").date()
@@ -657,7 +660,6 @@ else:
                             m_dob = st.date_input("DOB *", value=parsed_dob, min_value=datetime.date(1920, 1, 1),
                                                   max_value=datetime.date.today(), key=f"u_db_{m_id}",
                                                   disabled=is_disabled)
-
                             bg_idx = auth.BLOOD_GROUPS.index(m['blood_group']) if m.get(
                                 'blood_group') in auth.BLOOD_GROUPS else 0
                             m_bg = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS, index=bg_idx,
@@ -676,7 +678,6 @@ else:
                         m_adhaar = st.text_input("Aadhaar Number (12 numeric digits)",
                                                  value=str(m.get('adhaar', '')) if m.get('adhaar') else '',
                                                  key=f"u_ad_{m_id}", disabled=is_disabled)
-
                         is_same_initial = (
                                     m.get('current_address', '').strip() == header_address or m.get('current_address',
                                                                                                     '').strip() == "")
@@ -693,7 +694,6 @@ else:
                              "phone": m_phone, "email": m_email, "qualification": m_qual, "job": m_job,
                              "adhaar": m_adhaar, "addr_sel": m_addr_sel, "custom_addr": m_caddr})
 
-            # Form Control Buttons Array Layout Placement Configuration
             st.write("")
             c_save1, c_save2 = st.columns([4, 1])
             with c_save1:
@@ -729,7 +729,7 @@ else:
                     st.success("Roster securely locked. Move to subscription payment tab next.")
                     st.rerun()
 
-        # ADD / REMOVE LIVE INTERACTIVE BUTTON SECTIONS (SAFELY POSITIONED OUTSIDE FORM MATRIX)
+        # ADD / REMOVE BUTTON SECTIONS
         if not is_disabled:
             st.write("---")
             st.subheader("🛠️ Immediate Membership Operations Queue")
@@ -779,7 +779,7 @@ else:
                             st.success("📩 Insertion verification ticket safely staged in the admin queue!")
                             st.rerun()
 
-    # ---- TAB 3: SECURE CHECKOUT & LEDGER VOUCHERS ----
+    # ---- TAB 3: CHECKOUT GATEWAY ----
     with user_tabs[2]:
         if is_stuck_in_approval_queue:
             st.error(
