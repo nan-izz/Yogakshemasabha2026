@@ -1,5 +1,7 @@
 import os
 import datetime
+
+from numpy.distutils.fcompiler import none
 from supabase import create_client, Client
 
 # Initialize Supabase Client Connection
@@ -100,8 +102,7 @@ def submit_pending_approval(table, action, email, payload, target_id=None):
 def fetch_pending_approvals():
     return supabase.table("pending_approvals").select("*").order("created_at").execute().data
 
-
-def process_approval_action(approval_id, action, table, payload, target_id=null):
+def process_approval_action(approval_id, action, table, payload, target_id=None):
     """
     Executes staged modification requests from the pending queue into active production records.
     Handles INSERT, UPDATE, and DELETE triggers across both members and families structures.
