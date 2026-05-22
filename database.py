@@ -227,3 +227,47 @@ def submit_new_family_registration(email, payload):
         }).execute()
     except Exception as e:
         print(f"Queue Error: {str(e)}")
+
+
+def update_global_verification_toggle(is_active, base_fee, threshold, additional_fee):
+    try:
+        return supabase.table("admin_config").update({
+            "yearly_verification_active": is_active,
+            "base_family_fee": base_fee,
+            "base_member_threshold": threshold,
+            "additional_member_fee": additional_fee
+        }).eq("id", 1).execute()
+    except Exception as e:
+        print(f"Config Write Error: {str(e)}")
+        raise e
+
+
+def update_family_verification_state(family_id, status, payment_ref=None, receipt_url=None):
+    update_data = {"verification_status": status}
+    if payment_ref:
+        update_data["payment_reference"] = payment_ref
+    if receipt_url:
+        update_data["payment_receipt_url"] = receipt_url
+    return supabase.table("families").update(update_data).eq("family_id", family_id).execute()
+
+
+def update_admin_upi_credentials(upi_id, qr_file_binary=None):
+    try:
+        update_data = {"upi_id": upi_id}
+        if qr_file_binary is not None:
+            bucket_name = "upi_assets"
+            file_path = "qr_code_live.png"
+
+            # Upload or overwrite file inside public bucket folder context
+            supabase.storage.from_(bucket_name).upload(
+                path=file_path,
+                file=qr_file_binary,
+                file_options={"cache-control": "3600", "upsert": "true"}
+            )
+            public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+            update_data["upi_qr_url"] = public_url
+
+        return supabase.table("admin_config").update(update_data).eq("id", 1).execute()
+    except Exception as e:
+        print(f"UPI Asset Write Error: {str(e)}")
+        raise e
