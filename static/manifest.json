@@ -1,0 +1,16 @@
+{
+  "short_name": "Sabha Portal",
+  "name": "Yogakshemasabha Guruvayoor",
+  "icons": [
+    {
+      "src": "app/static/icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#ff4b4b",
+  "display": "standalone",
+  "orientation": "portrait"
+}
