@@ -61,12 +61,24 @@ def fetch_family_members(family_id):
     return supabase.table("members").select("*").eq("family_id", family_id).order("member_id").execute().data
 
 
-def fetch_all_families_global():
+def fetch_recent_families_global(limit=10):
     try:
-        return supabase.table("families").select("*").order("head_of_family").execute().data
+        # Pulls only the top 10 rows from Supabase, ordered by their ID or creation
+        # (If you have an updated_at column, replace family_id with updated_at)
+        return supabase.table("families").select("*").order("family_id", desc=True).limit(limit).execute().data
     except Exception:
-        # If the server abruptly dropped the HTTP/2 stream, retry the connection instantly
-        return supabase.table("families").select("*").order("head_of_family").execute().data
+        return supabase.table("families").select("*").order("family_id", desc=True).limit(limit).execute().data
+
+def search_families_global(search_term):
+    try:
+        # Dynamically filter rows on Supabase's server side instead of downloading everything to Python
+        return supabase.table("families").select("*")\
+            .or_(f"head_of_family.ilike.%{search_term}%,illam_name.ilike.%{search_term}%,address.ilike.%{search_term}%")\
+            .order("head_of_family").execute().data
+    except Exception:
+        return supabase.table("families").select("*")\
+            .or_(f"head_of_family.ilike.%{search_term}%,illam_name.ilike.%{search_term}%,address.ilike.%{search_term}%")\
+            .order("head_of_family").execute().data
 
 def fetch_all_members_global():
     try:
