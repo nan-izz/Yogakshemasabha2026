@@ -200,7 +200,7 @@ else:
                         m_curr_addr = st.text_area("Enter Custom Current Address", value=initial_custom_val, key=f"custom_addr_txt_{m_id}")
                     
                     # Regular action buttons
-                    if st.button(f"Save Profile Changes for {member['name']}", key=f"save_btn_{m_id}"):
+                   if st.button(f"Save Profile Changes for {member['name']}", key=f"save_btn_{m_id}"):
                         if m_name.strip() == "" or m_relation.strip() == "" or m_dob.strip() == "":
                             st.error("❌ Name, Relation, and Date of Birth (DOB) are mandatory fields!")
                         else:
@@ -212,15 +212,16 @@ else:
                                 final_addr = header_address if m_addr_selection == "Same as above" else m_curr_addr.strip()
                                 final_bg = None if m_blood == 'Not Identified' else m_blood
                                 
+                                # Safe stripping logic that checks for None/Null values first
                                 supabase.table("members").update({
                                     "name": m_name.strip(),
                                     "relation": m_relation.strip(),
                                     "dob": m_dob.strip(),
                                     "blood_group": final_bg,
-                                    "phone": m_phone.strip(),
-                                    "email": m_email.strip(),
-                                    "qualification": m_qual.strip(),
-                                    "job": m_job.strip(),
+                                    "phone": m_phone.strip() if m_phone else None,
+                                    "email": m_email.strip() if m_email else None,
+                                    "qualification": m_qual.strip() if m_qual else None,
+                                    "job": m_job.strip() if m_job else None,
                                     "adhaar": cleaned_adhaar if cleaned_adhaar != "" else None,
                                     "current_address": final_addr
                                 }).eq("member_id", m_id).execute()
