@@ -66,7 +66,7 @@ if not st.session_state.logged_in:
             with st.form("new_family_reg_form"):
                 reg_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name) *")
                 reg_illam = st.text_input("ഇല്ലപ്പേര് (Illam Name) *")
-                reg_goth = st.text_input("ഗോത്രം (Gothram)")
+                reg_goth = st.text_input("ഗോത്രം (ഗോത്രം)")
                 reg_email = st.text_input("Login Email ID (This will be your username) *").strip().lower()
                 reg_phone = st.text_input("Contact Phone Number *")
                 reg_dob = st.date_input("Head of Family DOB *", value=datetime.date(1985, 1, 1),
@@ -233,6 +233,13 @@ elif st.session_state.is_admin:
         with admin_tab[0]:
             st.header("Modifications Awaiting Administrative Clearance")
             st.subheader("💳 Staged Subscription Confirmations")
+
+            # Global setup pulling config properties for dynamically computing target subscription amounts
+            admin_cfg = db.fetch_admin_config()
+            db_base_fee = admin_cfg.get("base_family_fee", 700)
+            db_threshold = admin_cfg.get("base_member_threshold", 4)
+            db_add_fee = admin_cfg.get("additional_member_fee", 100)
+
             all_households = db.fetch_all_families_global()
             payment_requests = [x for x in all_households if x.get("verification_status") == "Payment Submitted"]
 
@@ -240,8 +247,24 @@ elif st.session_state.is_admin:
                 st.info("No incoming payment confirmations awaiting verification.")
             else:
                 for p_req in payment_requests:
+                    # FETCH DYNAMIC RECONCILIATION COUNT DATA
+                    f_m_records = db.fetch_family_members(p_req['family_id'])
+                    adm_h_count = len(f_m_records) if f_m_records else 1
+
+                    # Execute active billing math checks matching backend user calculation logic
+                    adm_expected_fee = int(db_base_fee) if adm_h_count <= int(db_threshold) else int(db_base_fee) + (
+                                (adm_h_count - int(db_threshold)) * int(db_add_fee))
+
                     with st.container(border=True):
                         st.write(f"🏡 **{p_req['head_of_family']}** | ഇല്ലം: {p_req['illam_name']}")
+
+                        # RENDER UPGRADED METRIC GLANCE DATA FOR RECONCILIATION SECURITY
+                        st.markdown(f"""
+                            <div style='background-color:#f1f3f5; padding:10px 15px; border-radius:6px; margin: 8px 0; font-size:14px; display:inline-block;'>
+                                👥 Family Count: <b>{adm_h_count} members</b> &nbsp;|&nbsp; 💰 Expected Fee: <b style='color:#2b8a3e;'>₹{adm_expected_fee}</b>
+                            </div>
+                        """, unsafe_allow_html=True)
+
                         st.write(f"Reference Token Code: `{p_req['payment_reference']}`")
                         pay_c1, pay_c2 = st.columns(2)
                         with pay_c1:
@@ -273,7 +296,6 @@ elif st.session_state.is_admin:
                         st.markdown(f"#### ✉️ Request #{req_id}: **{action}** on **{table.upper()}**")
                         st.caption(f"Submitted by: `{req['requested_by']}` | Target ID Reference: `{target_row_id}`")
 
-                        # Dataframe Layout Strategy Implementation
                         if action == "INSERT":
                             st.markdown("""
                                 <div style='background-color:#e8f4fd; padding:10px 15px; border-radius:8px; border-left:5px solid #0068c9; margin-bottom:10px;'>
@@ -357,10 +379,18 @@ elif st.session_state.is_admin:
                                     st.rerun()
                         else:
                             st.info(f"Registered Login Identifier: **{f['email_id']}**")
-                            if st.button("🔄 Reset Linked Email / Open Backdoor", key=f"rst_{f['family_id']}"):
-                                db.link_family_email(f['family_id'], None)
-                                st.success("Login identity reset completed.")
-                                st.rerun()
+
+                            adm_unlock_c1, adm_unlock_c2 = st.columns(2)
+                            with adm_unlock_c1:
+                                if st.button("🔄 Reset Linked Email / Open Backdoor", key=f"rst_{f['family_id']}"):
+                                    db.link_family_email(f['family_id'], None)
+                                    st.success("Login identity reset completed.")
+                                    st.rerun()
+                            with adm_unlock_c2:
+                                if st.button("🔓 Force Unlock Roster Fields", key=f"force_unl_{f['family_id']}"):
+                                    db.update_family_verification_state(f['family_id'], "Pending Update")
+                                    st.success("Household fields successfully unlocked for the user!")
+                                    st.rerun()
 
                         st.write("---")
                         with st.form(f"adm_fam_form_{f['family_id']}"):
@@ -583,19 +613,27 @@ else:
                 db.clear_user_notification(f_id)
                 st.rerun()
 
-    # Dynamic Verification Queue Status Lock Checks
+    # --- AUTOMATED WORKFLOW LOCK CONTROLLER ---
     is_stuck_in_approval_queue = db.check_if_user_has_pending_requests(st.session_state.auth_email)
+    is_awaiting_payment_clearance = (v_status == "Payment Submitted")
 
     if is_stuck_in_approval_queue:
         st.error(
             "⏳ **Portal Locked:** Your recent profile modifications are currently sitting in the queue awaiting committee validation check-off. No further edits or payments can be submitted until an admin clears this ticket.")
         is_disabled = True
         is_payment_allowed = False
-    else:
-        is_disabled = (v_status != "Pending Update")
-        is_payment_allowed = (v_status == "Data Verified")
 
-    if is_audit_window and not is_stuck_in_approval_queue:
+    elif is_awaiting_payment_clearance:
+        st.info(
+            "⏳ **Payment Under Review:** Your transaction reference token has been logged. Roster edits and further payments are locked until the central treasury approves your receipt.")
+        is_disabled = True
+        is_payment_allowed = False
+
+    else:
+        is_disabled = False
+        is_payment_allowed = (v_status == "Data Verified" or v_status == "Approved")
+
+    if is_audit_window and not is_stuck_in_approval_queue and not is_awaiting_payment_clearance:
         if v_status == "Pending Update":
             st.warning(
                 f"📣 **Annual Verification Window is OPEN.** Household Strength: **{member_count} members** | Custom Dynamic Fee: **₹{active_fee}**")
@@ -604,8 +642,6 @@ else:
         elif v_status == "Data Verified":
             st.success(
                 "✅ Household profile verified! Please open the **💳 Settle Subscription** tab to complete payment.")
-        elif v_status == "Payment Submitted":
-            st.info("⏳ Reference token logged. Awaiting committee reconciliation check.")
         elif v_status == "Approved":
             st.balloons()
             st.success("🎉 Annual subscription approved! Download your printable receipt in the payment tab.")
@@ -617,7 +653,7 @@ else:
     with user_tabs[0]:
         st.write("")
         if is_disabled or v_status != "Pending Update":
-            if not is_stuck_in_approval_queue:
+            if not is_stuck_in_approval_queue and not is_awaiting_payment_clearance:
                 st.markdown("#### 🔒 Household Identity Ledger (Locked)")
             else:
                 st.markdown("#### ⏳ Household Identity Ledger (Approval Pending)")
@@ -676,7 +712,6 @@ else:
                 for m in members_data:
                     m_id = m['member_id']
                     with st.container(border=True):
-                        # Visual Header Card Ribbon
                         st.markdown(
                             f"#### 👤 {m['name']} <span style='font-size:14px; color:#6c757d;'>({m['relation'] or 'Member'})</span>",
                             unsafe_allow_html=True)
@@ -825,13 +860,13 @@ else:
             st.info(
                 "⚠️ Please complete your profile records updates and lock verification on **Tab 2 (Family Members Roster)** to unlock payment gateways.")
 
-        elif v_status == "Data Verified":
-            st.markdown("### 💳 Secure Treasury Subscription Gateway")
+        elif is_payment_allowed and (
+                v_status == "Data Verified" or v_status == "Approved" or v_status == "Pending Update"):
+            st.markdown("### 💳 Secure Sabha Treasury Gateway")
             st.write("")
 
             pay_layout_col1, pay_layout_col2 = st.columns([2, 3])
             with pay_layout_col1:
-                # Bounded Image Card UI
                 with st.container(border=True):
                     st.markdown(
                         "<p style='text-align:center; font-weight:700; margin-bottom:5px; text-transform:uppercase;'>OFFICIAL SABHA TREASURY QR</p>",
@@ -871,7 +906,8 @@ else:
             st.info(
                 f"Trace reference key `{family_data.get('payment_reference')}` is currently undergoing bank ledger validation checks. Your official central treasury receipt will drop here once validated.")
 
-        elif v_status == "Approved":
+        if v_status == "Approved":
+            st.write("---")
             st.subheader("📥 Central Treasury Receipts Voucher")
             current_year = datetime.date.today().year
             receipt_template = f"""
