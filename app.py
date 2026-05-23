@@ -246,19 +246,29 @@ elif st.session_state.is_admin:
                             db.reject_pending_approval(req_id)
                             st.rerun()
 
-        # ---- ADMIN TAB 2: GLOBAL DIRECTORY SEARCH MATRIX ----
+        # ---- ADMIN TAB 2: GLOBAL DIRECTORY SEARCH MATRIX (EDITABLE TARGET VIEWS RESTORED) ----
         with admin_tab[1]:
             st.header("Global Directory Master Tracking View")
-            search_q = st.text_input("Type here to search across Head Name, Illam, or Address (Press Enter)").strip()
-            display_fams = db.fetch_recent_families_global(limit=10) if search_q == "" else db.search_families_global(
-                search_q)
+
+            search_q = st.text_input(
+                "🔍 Search over Head Name, Illam or Address (Leave blank for default tracking views)").strip()
+
+            if search_q == "":
+                st.subheader("⏱️ Last 10 Recently Updated Households")
+                display_fams = db.fetch_recent_families_global(limit=10)
+            else:
+                st.subheader(f"🎯 Search Query Results for: '{search_q}'")
+                display_fams = db.search_families_global(search_q)
 
             if not display_fams:
-                st.info("No matching records found.")
+                st.info("No matching records found in directories.")
             else:
                 for f in display_fams:
                     if f["family_id"] == 999999: continue
-                    with st.expander(f"🏡 {f.get('head_of_family')} | ഇല്ലം: {f.get('illam_name')}"):
+
+                    exp_label = f"🏡 {f.get('head_of_family')} | ഇല്ലം: {f.get('illam_name')} | Status: {f.get('verification_status', 'Pending Update')}"
+                    with st.expander(exp_label):
+
                         if not f.get("email_id"):
                             pre_reg_email = st.text_input("Enter Email to bind to this profile",
                                                           key=f"pr_em_txt_{f['family_id']}").strip().lower()
@@ -270,33 +280,95 @@ elif st.session_state.is_admin:
                                     st.success("Email bound successfully!")
                                     st.rerun()
                         else:
-                            st.info(f"Registered Login Identifier: **{f['email_id']}**")
-                            adm_unlock_c1, adm_unlock_c2 = st.columns(2)
-                            with adm_unlock_c1:
-                                if st.button("🔄 Reset Linked Email / Open Backdoor", key=f"rst_{f['family_id']}"):
-                                    db.link_family_email(f['family_id'], None)
-                                    st.success("Identity reset completed.")
+                            st.info(f"Registered Login Identifier Email: **{f['email_id']}**")
+                            if st.button("🔄 Reset Linked Email Address", key=f"rst_{f['family_id']}"):
+                                db.link_family_email(f['family_id'], None)
+                                st.success("Identity reset completed.")
+                                st.rerun()
+
+                        st.write("---")
+                        # Header details form
+                        with st.form(f"adm_fam_form_{f['family_id']}"):
+                            st.markdown("#### 🛠️ Edit Household Core Header Information")
+                            a_head = st.text_input("Head of Family Name", value=f["head_of_family"])
+                            a_illam = st.text_input("Illam Name", value=f["illam_name"])
+                            a_goth = st.text_input("Gothram", value=f.get("gothram", ""))
+                            a_addr = st.text_area("Master Address Line", value=f["address"])
+
+                            b_cols = st.columns([4, 1])
+                            with b_cols[0]:
+                                if st.form_submit_button("💾 Direct Save Header Changes"):
+                                    db.update_family_header(f['family_id'], a_head, a_illam, a_goth, a_addr)
+                                    st.success("Header details updated directly!")
                                     st.rerun()
-                            with adm_unlock_c2:
-                                if st.button("🔓 Force Unlock Roster Fields", key=f"force_unl_{f['family_id']}"):
-                                    db.update_family_verification_state(f['family_id'], "Pending Update")
-                                    st.success("Fields unlocked!")
+                            with b_cols[1]:
+                                if st.form_submit_button("❌ Drop Household"):
+                                    db.admin_direct_delete_family(f['family_id'])
+                                    st.warning("Household entity completely dropped.")
                                     st.rerun()
 
-                    st.write("---")
-                    with st.form(f"adm_fam_form_{f['family_id']}"):
-                        st.subheader("🛠️ Override Household Header")
-                        a_head = st.text_input("Head Name", value=f["head_of_family"])
-                        a_illam = st.text_input("Illam Name", value=f["illam_name"])
-                        a_goth = st.text_input("Gothram", value=f.get("gothram", ""))
-                        a_addr = st.text_area("Master Address", value=f["address"])
+                        st.write("---")
+                        # Family members editable profiles registry
+                        st.markdown("#### 👥 Core Family Members Registry Details")
+                        m_records = db.fetch_family_members(f['family_id'])
 
-                        if st.form_submit_button("💾 Direct Save Header Changes"):
-                            db.update_family_header(f['family_id'], a_head, a_illam, a_goth, a_addr)
-                            st.success("Header saved directly!")
-                            st.rerun()
+                        if not m_records:
+                            st.info("No members mapped to this household yet.")
+                        else:
+                            for m in m_records:
+                                with st.container(border=True):
+                                    with st.form(f"adm_mem_form_{m['member_id']}"):
+                                        st.markdown(f"##### Member Profile Card: **{m['name']}**")
 
-        # ---- ADMIN TAB 3: AGE VERIFICATION & DISTRICT SABHA REPORTS (FULLY RESTORED) ----
+                                        mc1, mc2 = st.columns(2)
+                                        with mc1:
+                                            ma_name = st.text_input("Full Name", value=m["name"])
+                                            ma_rel = st.text_input("Relation to Head", value=m["relation"])
+                                            ma_dob = st.text_input("DOB (YYYY-MM-DD)",
+                                                                   value=str(m["dob"]) if m.get("dob") else "")
+                                            ma_bg = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS,
+                                                                 index=auth.BLOOD_GROUPS.index(
+                                                                     m["blood_group"]) if m.get(
+                                                                     "blood_group") in auth.BLOOD_GROUPS else 0)
+                                        with mc2:
+                                            ma_phone = st.text_input("Phone Number", value=m.get("phone", ""))
+                                            ma_email = st.text_input("Email", value=m.get("email", ""))
+                                            ma_qual = st.text_input("Qualification", value=m.get("qualification", ""))
+                                            ma_job = st.text_input("Occupation / Job", value=m.get("job", ""))
+
+                                        ma_adh = st.text_input("Aadhaar Number", value=m.get("adhaar", ""))
+                                        ma_caddr = st.text_area("Current Residential Address",
+                                                                value=m.get("current_address", ""))
+
+                                        m_cols = st.columns([4, 1])
+                                        with m_cols[0]:
+                                            if st.form_submit_button("💾 Save Member Direct Updates"):
+                                                is_valid, clean_a = auth.validate_aadhaar(ma_adh)
+                                                if ma_name.strip() == "" or ma_rel.strip() == "" or ma_dob.strip() == "":
+                                                    st.error("Fields marked with * are mandatory parameters.")
+                                                elif not is_valid:
+                                                    st.error("Invalid Aadhaar formatting configuration.")
+                                                else:
+                                                    db.admin_direct_save_member(m['member_id'], {
+                                                        "name": ma_name.strip(), "relation": ma_rel.strip(),
+                                                        "dob": ma_dob.strip(),
+                                                        "blood_group": None if ma_bg == 'Not Identified' else ma_bg,
+                                                        "phone": ma_phone.strip() if ma_phone else None,
+                                                        "email": ma_email.strip() if ma_email else None,
+                                                        "qualification": ma_qual.strip() if ma_qual else None,
+                                                        "job": ma_job.strip() if ma_job else None,
+                                                        "adhaar": clean_a if clean_a != "" else None,
+                                                        "current_address": ma_caddr.strip()
+                                                    })
+                                                    st.success("Member updates pushed directly!")
+                                                    st.rerun()
+                                        with m_cols[1]:
+                                            if st.form_submit_button("❌ Drop Member"):
+                                                db.admin_direct_delete_member(m['member_id'])
+                                                st.warning("Member dropped from registry.")
+                                                st.rerun()
+
+        # ---- ADMIN TAB 3: AGE VERIFICATION & DISTRICT SABHA REPORTS ----
         with admin_tab[2]:
             st.header("Statutory Electoral & District Sabha Calculations")
             current_year = datetime.date.today().year
@@ -338,15 +410,11 @@ elif st.session_state.is_admin:
                             final_address = f_info.get("address", "N/A") if not m.get(
                                 "current_address") or "Same as above" in m.get("current_address", "") else m.get(
                                 "current_address")
-                            district_report.append({
-                                "Name": m["name"],
-                                "DOB": m["dob"],
-                                "Blood Group": m["blood_group"] or "Not Identified",
-                                "Illam Name": f_info.get("illam_name", "N/A"),
-                                "Address": final_address,
-                                "Phone": m["phone"] or "N/A",
-                                "Status": status
-                            })
+                            district_report.append({"Name": m["name"], "DOB": m["dob"],
+                                                    "Blood Group": m["blood_group"] or "Not Identified",
+                                                    "Illam Name": f_info.get("illam_name", "N/A"),
+                                                    "Address": final_address, "Phone": m["phone"] or "N/A",
+                                                    "Status": status})
                         except:
                             pass
                 if district_report:
@@ -359,7 +427,7 @@ elif st.session_state.is_admin:
                     st.download_button(label="📥 Download District Sabha Report (CSV)", data=output_ds.getvalue(),
                                        file_name=f"district_sabha_{current_year}.csv", mime="text/csv")
 
-        # ---- ADMIN TAB 4: SYSTEM CONFIGS & ACCOUNT CREDENTIALS ----
+        # ---- ADMIN TAB 4: SYSTEM CONFIGS (RESTORED COMPLETELY) ----
         with admin_tab[3]:
             st.header("Security & Subscription Configuration Settings")
             current_config = db.fetch_admin_config()
@@ -384,6 +452,22 @@ elif st.session_state.is_admin:
                     db.update_global_verification_toggle(toggle_switch, cfg_base, cfg_thresh, cfg_add)
                     st.success("🔒 Configuration variables updated live!")
                     st.rerun()
+
+            st.write("---")
+            # RESTORED UPI ID AND QR ASSET CONFIGURATION TRACK PANEL
+            st.subheader("💳 Configure Sabha Treasury UPI Parameters & QR Gateway")
+            with st.form("admin_upi_configuration_form"):
+                new_upi_id = st.text_input("Sabha Official UPI ID / VPA Handle",
+                                           value=current_config.get("upi_id", "sabha@upi")).strip()
+                uploaded_qr = st.file_uploader("Upload Official UPI QR Code Image (PNG/JPG)",
+                                               type=["png", "jpg", "jpeg"])
+                if st.form_submit_button("Update Payment Gateway Assets"):
+                    if new_upi_id == "":
+                        st.error("UPI address handle cannot be left blank.")
+                    else:
+                        db.update_admin_upi_credentials(new_upi_id, uploaded_qr.getvalue() if uploaded_qr else None)
+                        st.success("🔒 Treasury billing gateway assets updated successfully!")
+                        st.rerun()
 
             st.write("---")
             with st.form("admin_settings_form"):
@@ -620,7 +704,7 @@ else:
                 st.markdown("### 📥 Download Your Official Payment Receipt")
                 st.success("Thank you! Your yearly membership subscription has been cleared.")
                 current_year = datetime.date.today().year
-                receipt_template = f"====================================================\n          YOGAKSHEMASABHA CENTRAL TREASURY\n                OFFICIAL PAYMENT RECEIPT\n====================================================\nReceipt Date: {datetime.date.today().strftime('%d-%B-%Y')}\nHousehold Unit: {family_data.get('head_of_family')}\nIllam Name: {family_data.get('illam_name')}\nTotal Members: {member_count} Profile Logs Saved\nAmount Paid: INR {active_fee}.00\nStatus: CLEAR / FULLY VERIFIED CORPS\n===================================================="
+                receipt_template = f"====================================================\n          YOGAKSHEMASABHA CENTRAL TREASURY\n                OFFICIAL PAYMENT RECEIPT\n====================================================\nReceipt Date: {datetime.date.today().strftime('%d-%B-%Y')}\nHousehold Unit: {family_data.get('head_of_family')} \nIllam Name: {family_data.get('illam_name')} \nTotal Members: {member_count} Profile Logs Saved\nAmount Paid: INR {active_fee}.00\nStatus: CLEAR / FULLY VERIFIED CORPS\n===================================================="
                 st.code(receipt_template, language="text")
                 st.download_button(label="📥 Click Here to Download & Print Receipt", data=receipt_template,
                                    file_name=f"sabha_receipt_{f_id}.txt", mime="text/plain")

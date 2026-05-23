@@ -38,20 +38,8 @@ def fetch_admin_config():
     try:
         return supabase.table("admin_config").select("*").eq("id", 1).execute().data[0]
     except Exception:
-        try:
-            return supabase.table("admin_config").select("*").eq("id", 1).execute().data[0]
-        except Exception:
-            return {"username": "sabhaadmin", "password": "admin123", "yearly_verification_active": False}
-
-
-@st.cache_data(ttl=600)
-def fetch_district_sabha_report_data():
-    try:
-        return supabase.table("members").select(
-            "name, dob, blood_group, current_address, phone, created_at, family_id").execute().data
-    except Exception:
-        return supabase.table("members").select(
-            "name, dob, blood_group, current_address, phone, created_at, family_id").execute().data
+        return {"username": "sabhaadmin", "password": "admin123", "yearly_verification_active": False,
+                "base_family_fee": 700, "base_member_threshold": 4, "additional_member_fee": 100}
 
 
 @st.cache_data(ttl=300)
@@ -65,13 +53,13 @@ def fetch_recent_families_global(limit=10):
 @st.cache_data(ttl=60)
 def search_families_global(search_term):
     try:
-        return supabase.table("families").select("*") \
-            .or_(f"head_of_family.ilike.%{search_term}%,illam_name.ilike.%{search_term}%,address.ilike.%{search_term}%") \
-            .order("head_of_family").execute().data
+        return supabase.table("families").select("*").or_(
+            f"head_of_family.ilike.%{search_term}%,illam_name.ilike.%{search_term}%,address.ilike.%{search_term}%").order(
+            "head_of_family").execute().data
     except Exception:
-        return supabase.table("families").select("*") \
-            .or_(f"head_of_family.ilike.%{search_term}%,illam_name.ilike.%{search_term}%,address.ilike.%{search_term}%") \
-            .order("head_of_family").execute().data
+        return supabase.table("families").select("*").or_(
+            f"head_of_family.ilike.%{search_term}%,illam_name.ilike.%{search_term}%,address.ilike.%{search_term}%").order(
+            "head_of_family").execute().data
 
 
 def fetch_single_family(family_id):
@@ -115,35 +103,25 @@ def process_approval_action(approval_id, action, table, payload, target_id=None)
     try:
         family_email = None
         req_lookup = supabase.table("pending_approvals").select("requested_by").eq("approval_id", approval_id).execute()
-        if req_lookup.data:
-            family_email = req_lookup.data[0].get("requested_by")
+        if req_lookup.data: family_email = req_lookup.data[0].get("requested_by")
 
         if table == "families" and action == "INSERT":
-            fam_res = supabase.table("families").insert({
-                "head_of_family": payload.get("head_of_family"),
-                "illam_name": payload.get("illam_name"),
-                "gothram": payload.get("gothram"),
-                "address": payload.get("address"),
-                "email_id": payload.get("email_id")
-            }).execute()
-
+            fam_res = supabase.table("families").insert(
+                {"head_of_family": payload.get("head_of_family"), "illam_name": payload.get("illam_name"),
+                 "gothram": payload.get("gothram"), "address": payload.get("address"),
+                 "email_id": payload.get("email_id")}).execute()
             if fam_res.data:
-                new_f_id = fam_res.data[0]["family_id"]
-                supabase.table("members").insert({
-                    "family_id": new_f_id, "name": payload.get("head_of_family"),
-                    "relation": "Head of Family", "dob": payload.get("head_dob"),
-                    "phone": payload.get("head_phone"), "current_address": payload.get("address")
-                }).execute()
-
+                supabase.table("members").insert(
+                    {"family_id": fam_res.data[0]["family_id"], "name": payload.get("head_of_family"),
+                     "relation": "Head of Family", "dob": payload.get("head_dob"), "phone": payload.get("head_phone"),
+                     "current_address": payload.get("address")}).execute()
         elif table == "members" and action == "INSERT":
             supabase.table("members").insert(payload).execute()
-
         elif action == "UPDATE":
             if table == "families":
                 supabase.table("families").update(payload).eq("family_id", target_id).execute()
             elif table == "members":
                 supabase.table("members").update(payload).eq("member_id", target_id).execute()
-
         elif action == "DELETE":
             if table == "members":
                 supabase.table("members").delete().eq("member_id", target_id).execute()
@@ -153,29 +131,27 @@ def process_approval_action(approval_id, action, table, payload, target_id=None)
 
         if family_email:
             supabase.table("families").update({
-                "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee."
-            }).eq("email_id", family_email).execute()
+                                                  "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee."}).eq(
+                "email_id", family_email).execute()
 
         supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
         st.cache_data.clear()
         return True
     except Exception as e:
-        print(f"Relational Processing Execution Failure: {str(e)}")
+        print(f"Write Execution Failure: {str(e)}")
         raise e
 
 
 def submit_pending_approval(table, action, requested_by, payload, target_id=None):
-    return supabase.table("pending_approvals").insert({
-        "target_table": table, "action_type": action,
-        "requested_by": requested_by, "change_payload": payload, "target_id": target_id
-    }).execute()
+    return supabase.table("pending_approvals").insert(
+        {"target_table": table, "action_type": action, "requested_by": requested_by, "change_payload": payload,
+         "target_id": target_id}).execute()
 
 
 def submit_new_family_registration(email, payload):
-    return supabase.table("pending_approvals").insert({
-        "target_table": "families", "action_type": "INSERT",
-        "requested_by": email, "change_payload": payload
-    }).execute()
+    return supabase.table("pending_approvals").insert(
+        {"target_table": "families", "action_type": "INSERT", "requested_by": email,
+         "change_payload": payload}).execute()
 
 
 def reject_pending_approval(approval_id):
@@ -185,11 +161,10 @@ def reject_pending_approval(approval_id):
         family_email = req_lookup.data[0].get("requested_by")
         action = req_lookup.data[0].get("action_type")
         table = req_lookup.data[0].get("target_table")
-
         if family_email:
             supabase.table("families").update({
-                "admin_notification": f"❌ Your recent request to {action.lower()} records inside '{table}' was REJECTED by the managing committee."
-            }).eq("email_id", family_email).execute()
+                                                  "admin_notification": f"❌ Your recent request to {action.lower()} records inside '{table}' was REJECTED by the managing committee."}).eq(
+                "email_id", family_email).execute()
 
     res = supabase.table("pending_approvals").delete().eq("approval_id", approval_id).execute()
     st.cache_data.clear()
@@ -203,9 +178,9 @@ def clear_user_notification(family_id):
 
 
 def update_family_header(family_id, head, illam, gothram, address):
-    res = supabase.table("families").update({
-        "head_of_family": head, "illam_name": illam, "gothram": gothram, "address": address, "updated_at": "now()"
-    }).eq("family_id", family_id).execute()
+    res = supabase.table("families").update(
+        {"head_of_family": head, "illam_name": illam, "gothram": gothram, "address": address,
+         "updated_at": "now()"}).eq("family_id", family_id).execute()
     st.cache_data.clear()
     return res
 
