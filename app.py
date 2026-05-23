@@ -625,16 +625,25 @@ else:
                             final_m_addr = header_address if r["addr_sel"] == "Same as Household Address" else r[
                                 "custom_addr"].strip()
 
+                            # CRITICAL DATA SCRUBBING FOR TYPE-CASTING RULES
+                            # Force completely empty optional inputs into pure Python None data objects
+                            clean_phone = r["phone"].strip() if r["phone"] and r["phone"].strip() != "" else None
+                            clean_adh = clean_a if clean_a and clean_a.strip() != "" else None
+                            clean_email = r["email"].strip() if r["email"] and r["email"].strip() != "" else None
+                            clean_qual = r["qualification"].strip() if r["qualification"] and r[
+                                "qualification"].strip() != "" else None
+                            clean_job = r["job"].strip() if r["job"] and r["job"].strip() != "" else None
+
                             db.submit_pending_approval("members", "UPDATE", st.session_state.auth_email, {
                                 "name": r["name"].strip(),
                                 "relation": r["relation"].strip(),
                                 "dob": r["dob"].strftime("%Y-%m-%d"),
                                 "blood_group": None if r["blood_group"] == 'Not Identified' else r["blood_group"],
-                                "phone": r["phone"].strip() if r["phone"] else None,
-                                "email": r["email"].strip() if r["email"] else None,
-                                "qualification": r["qualification"].strip() if r["qualification"] else None,
-                                "job": r["job"].strip() if r["job"] else None,
-                                "adhaar": clean_a if clean_a != "" else None,
+                                "phone": clean_phone,
+                                "email": clean_email,
+                                "qualification": clean_qual,
+                                "job": clean_job,
+                                "adhaar": clean_adh,
                                 "current_address": final_m_addr
                             }, target_id=r["member_id"])
                             staged_count += 1
@@ -644,7 +653,7 @@ else:
                         db.update_family_verification_state(f_id, "Pending Update")
                         st.success(
                             "📩 **Changes Staged Successfully!** Your modifications have been submitted to the committee queue for approval. Once the review is completed, you will receive a notification alert here instantly.")
-                        st.reru
+                        st.rerun()
 
         with st.expander("➕ Request Adding a New Member to this Household"):
             n_name = st.text_input("Full Name *", key="n_name")
@@ -661,22 +670,40 @@ else:
             n_custom_addr = st.text_area("Custom Address String", key="n_txa") if n_addr_sel == "Custom Address" else ""
 
             if st.button("Submit New Member Profile to Queue"):
+                # ENFORCED PARAMETERS CHECK: Verifies Name and Relation are not blank strings
                 if n_name.strip() == "" or n_rel.strip() == "":
-                    st.error("❌ Mandatory parameters missing.")
+                    st.error("❌ Mandatory parameters missing: You must enter a valid Name and Relation to continue.")
                 else:
                     is_valid, clean_a = auth.validate_aadhaar(n_adhaar)
-                    db.submit_pending_approval("members", "INSERT", st.session_state.auth_email, {
-                        "family_id": f_id, "name": n_name.strip(), "relation": n_rel.strip(),
-                        "dob": n_dob.strftime("%Y-%m-%d"),
-                        "blood_group": None if n_blood == 'Not Identified' else n_blood,
-                        "phone": n_phone.strip() if n_phone else None, "email": n_email.strip() if n_email else None,
-                        "qualification": n_qual.strip() if n_qual else None, "job": n_job.strip() if n_job else None,
-                        "adhaar": clean_a if clean_a != "" else None,
-                        "current_address": header_address if n_addr_sel == "Same as Household Address" else n_custom_addr.strip()
-                    })
-                    db.update_family_verification_state(f_id, "Pending Update")
-                    st.success("Staged in the admin queue!")
-                    st.rerun()
+                    if n_adhaar.strip() != "" and not is_valid:
+                        st.error("❌ Invalid Aadhaar number syntax. It must be exactly 12 numeric digits.")
+                    else:
+                        # DATA SCRUBBING FOR DATATYPE INTERLOCK SAFETY
+                        clean_n_phone = n_phone.strip() if n_phone and n_phone.strip() != "" else None
+                        clean_n_adh = clean_a if clean_a and clean_a.strip() != "" else None
+                        clean_n_email = n_email.strip() if n_email and n_email.strip() != "" else None
+                        clean_n_qual = n_qual.strip() if n_qual and n_qual.strip() != "" else None
+                        clean_n_job = n_job.strip() if n_job and n_job.strip() != "" else None
+                        final_n_addr = header_address if n_addr_sel == "Same as Household Address" else n_custom_addr.strip()
+
+                        db.submit_pending_approval("members", "INSERT", st.session_state.auth_email, {
+                            "family_id": f_id,
+                            "name": n_name.strip(),
+                            "relation": n_rel.strip(),
+                            "dob": n_dob.strftime("%Y-%m-%d"),  # Safely formatted date object string
+                            "blood_group": None if n_blood == 'Not Identified' else n_blood,
+                            "phone": clean_n_phone,
+                            "email": clean_n_email,
+                            "qualification": clean_n_qual,
+                            "job": clean_n_job,
+                            "adhaar": clean_n_adh,
+                            "current_address": final_n_addr
+                        })
+
+                        db.update_family_verification_state(f_id, "Pending Update")
+                        st.success(
+                            "📩 **Addition Request Staged successfully!** The new profile has been sent to the committee queue for approval. Once reviewed by an administrator, your household summary page will be refreshed.")
+                        st.rerun()
 
     # ---- TAB 3: THE SEPARATE PROGRESSIVE VERIFICATION TUNNEL PANEL ----
     with user_tabs[2]:
