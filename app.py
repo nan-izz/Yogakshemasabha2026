@@ -92,15 +92,32 @@ if not st.session_state.logged_in:
                     elif "@" not in input_email or "." not in input_email:
                         st.error("❌ Please enter a valid email address.")
                     elif db.check_family_email_exists(input_email):
-                        db.send_supabase_otp(input_email)
-                        st.session_state.auth_email = input_email
-                        st.session_state.otp_sent = True
-                        st.success(f"Verification code sent successfully to {input_email}")
-                        st.rerun()
+
+                        # --- TOAST / POPUP EXCEPTION PROTECTION ENGINE ---
+                        try:
+                            with st.spinner("Requesting secure login code from authentication servers..."):
+                                db.send_supabase_otp(input_email)
+                            st.session_state.auth_email = input_email
+                            st.session_state.otp_sent = True
+                            st.success(f"📩 Verification code sent successfully to {input_email}")
+                            st.rerun()
+
+                        except Exception as e:
+                            # Capture raw error messages
+                            error_msg = str(e)
+
+                            # Check if it's the security rate-limit rule from Supabase
+                            if "only request this after" in error_msg.lower():
+                                # Extract the exact seconds remaining if present, or show a supportive message
+                                st.warning(
+                                    "⏳ **Slow down a bit!** A security login code was already sent to your inbox just a moment ago. To protect your profile, please wait roughly 30 seconds before requesting a new code.")
+                            else:
+                                # Fallback wrapper safety for any other unknown network errors
+                                st.error(
+                                    "⚠️ **Connection Timeout:** The authentication servers are currently busy or your mobile network connection dropped. Please check your signal bars and try tapping the button again.")
                     else:
                         st.error(
                             "🛑 This email is not registered. Use the onboarding link below if you are a new family.")
-
                 st.write("---")
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
