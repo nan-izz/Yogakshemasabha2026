@@ -597,31 +597,54 @@ else:
 
             st.write("")
             if st.form_submit_button("💾 Process All Roster Modifications / Deletions"):
+                has_errors = False
+                staged_count = 0
+
+                # Pre-validate all cards first to ensure data integrity before writing to Supabase
                 for r in member_references:
-                    if r["should_delete"]:
-                        db.submit_pending_approval("members", "DELETE", st.session_state.auth_email,
-                                                   {"name": r['name']}, target_id=r["member_id"])
-                    else:
+                    if not r["should_delete"]:
                         is_valid, clean_a = auth.validate_aadhaar(r["adhaar"])
                         if r["name"].strip() == "" or r["relation"].strip() == "":
-                            st.error("Mandatory fields are blank.")
+                            st.error(
+                                f"❌ Mandatory parameters (Name/Relation) are missing on member card: **{r['name']}**")
+                            has_errors = True
+                        elif r["adhaar"].strip() != "" and not is_valid:
+                            st.error(
+                                f"❌ Invalid Aadhaar number syntax on member card: **{r['name']}**. It must be exactly 12 numeric digits.")
+                            has_errors = True
+
+                # If all cards pass validation checks, process the batch queue submission
+                if not has_errors:
+                    for r in member_references:
+                        if r["should_delete"]:
+                            db.submit_pending_approval("members", "DELETE", st.session_state.auth_email,
+                                                       {"name": r['name']}, target_id=r["member_id"])
+                            staged_count += 1
                         else:
+                            _, clean_a = auth.validate_aadhaar(r["adhaar"])
                             final_m_addr = header_address if r["addr_sel"] == "Same as Household Address" else r[
                                 "custom_addr"].strip()
+
                             db.submit_pending_approval("members", "UPDATE", st.session_state.auth_email, {
-                                "name": r["name"].strip(), "relation": r["relation"].strip(),
+                                "name": r["name"].strip(),
+                                "relation": r["relation"].strip(),
                                 "dob": r["dob"].strftime("%Y-%m-%d"),
                                 "blood_group": None if r["blood_group"] == 'Not Identified' else r["blood_group"],
                                 "phone": r["phone"].strip() if r["phone"] else None,
                                 "email": r["email"].strip() if r["email"] else None,
                                 "qualification": r["qualification"].strip() if r["qualification"] else None,
                                 "job": r["job"].strip() if r["job"] else None,
-                                "adhaar": clean_a if clean_a != "" else None, "current_address": final_m_addr
+                                "adhaar": clean_a if clean_a != "" else None,
+                                "current_address": final_m_addr
                             }, target_id=r["member_id"])
+                            staged_count += 1
 
-                db.update_family_verification_state(f_id, "Pending Update")
-                st.success("Roster adjustments captured! Please complete verification checklist inside Tab 3.")
-                st.rerun()
+                    if staged_count > 0:
+                        # REQUIREMENT TRIGGER: Reset lifecycle stage and notify user explicitly
+                        db.update_family_verification_state(f_id, "Pending Update")
+                        st.success(
+                            "📩 **Changes Staged Successfully!** Your modifications have been submitted to the committee queue for approval. Once the review is completed, you will receive a notification alert here instantly.")
+                        st.reru
 
         with st.expander("➕ Request Adding a New Member to this Household"):
             n_name = st.text_input("Full Name *", key="n_name")
