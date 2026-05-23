@@ -250,3 +250,23 @@ def admin_update_credentials(username, password):
 
 def send_supabase_otp(email):
     return supabase.auth.sign_in_with_otp({"email": email.strip().lower()})
+
+def verify_supabase_otp(email, token):
+    """
+    Submits the 6-digit token to Supabase Auth to verify its validity.
+    Returns True if valid, False if incorrect or expired.
+    """
+    try:
+        # Use Supabase's native type verification handler
+        res = supabase.auth.verify_otp({
+            "email": email.strip().lower(),
+            "token": token.strip(),
+            "type": "magiclink"  # or "signup" depending on your auth scheme configuration
+        })
+        # If a valid session user profile is returned, the OTP is correct
+        if res.user:
+            return True
+        return False
+    except Exception as e:
+        print(f"OTP Cryptographic Verification Engine Failure: {str(e)}")
+        return False

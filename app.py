@@ -131,25 +131,40 @@ if not st.session_state.logged_in:
                         st.session_state.auth_email = None
                         st.rerun()
 
+                    # ---- FIXED STATE C: STANDARD USER INTERACTIVE OTP ENTRY (MOBILE SECURE) ----
             elif st.session_state.otp_sent:
                 st.info(f"📩 Logging into Household Profile: **{st.session_state.auth_email}**")
-                otp_token = st.text_input("Enter the 6-Digit Verification Code sent to your inbox", max_chars=6).strip()
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("Verify Code & Open Dashboard"):
-                        family_lookup = db.fetch_family_by_email(st.session_state.auth_email)
-                        if family_lookup:
-                            st.session_state.family_id = family_lookup["family_id"]
-                            st.session_state.logged_in = True
-                            st.rerun()
+                with st.form("mobile_secure_otp_form"):
+                    otp_token = st.text_input("Enter the 6-Digit Verification Code sent to your inbox",
+                                                      max_chars=6).strip()
+                    submit_otp = st.form_submit_button("Verify Code & Open Dashboard", use_container_width=True)
+
+                    if submit_otp:
+                        if otp_token == "" or len(otp_token) < 6:
+                            st.error("❌ Please enter a valid 6-digit verification code.")
                         else:
-                            st.error("❌ Link broken. Record not recovered.")
-                with col2:
-                    if st.button("← Cancel"):
-                        st.session_state.otp_sent = False
-                        st.session_state.auth_email = None
-                        st.rerun()
+                            with st.spinner("Verifying token with authentication servers..."):
+                                # CRITICAL SECURITY CHECK: Validates token against Supabase ledger
+                                is_otp_valid = db.verify_supabase_otp(st.session_state.auth_email, otp_token)
+
+                            if is_otp_valid:
+                                family_lookup = db.fetch_family_by_email(st.session_state.auth_email)
+                                if family_lookup:
+                                    st.session_state.family_id = family_lookup["family_id"]
+                                    st.session_state.logged_in = True
+                                    st.success("🎉 Access Granted! Loading dashboard...")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Link broken. Household profile mismatch.")
+                            else:
+                                st.error(
+                                    "🛑 Invalid or expired verification code. Please check your inbox or try again.")
+
+                if st.button("← Cancel & Try Different Email", use_container_width=True):
+                    st.session_state.otp_sent = False
+                    st.session_state.auth_email = None
+                    st.rerun()
 
         elif st.session_state.login_mode == "backdoor":
             st.subheader("Verify via Household Details (No Email Connected)")
