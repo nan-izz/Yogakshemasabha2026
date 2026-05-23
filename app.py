@@ -546,6 +546,11 @@ else:
         if st.button("Dismiss Notification"): db.clear_user_notification(f_id); st.rerun()
 
     is_disabled = False
+    # === PASTE STEP 3 DIRECTLY HERE ===
+    # --- CROSS-RERUN PERSISTENT BANNER DISPLAY LOGIC ---
+    if "roster_success_msg" in st.session_state and st.session_state.roster_success_msg:
+        st.success(st.session_state.roster_success_msg)
+        st.session_state.roster_success_msg = None
     user_tabs = st.tabs(["🏡 Household Profile", "👥 Family Members Roster", "📋 Verify & Settle Dues"])
 
     # ---- TAB 1: HOUSEHOLD IDENTITY HEADER ----
@@ -681,10 +686,11 @@ else:
                             staged_count += 1
 
                     if staged_count > 0:
-                        # REQUIREMENT TRIGGER: Reset lifecycle stage and notify user explicitly
+                        # Save the confirmation alert text inside session memory state
+                        st.session_state.roster_success_msg = "📩 **Changes Staged Successfully!** Your modifications have been submitted to the committee queue for approval. Once the review is completed, you will receive a notification alert here instantly."
+
+                        # Reset the dynamic process map tracker step
                         db.update_family_verification_state(f_id, "Pending Update")
-                        st.success(
-                            "📩 **Changes Staged Successfully!** Your modifications have been submitted to the committee queue for approval. Once the review is completed, you will receive a notification alert here instantly.")
                         st.rerun()
 
         with st.expander("➕ Request Adding a New Member to this Household"):
@@ -722,7 +728,7 @@ else:
                             "family_id": f_id,
                             "name": n_name.strip(),
                             "relation": n_rel.strip(),
-                            "dob": n_dob.strftime("%Y-%m-%d"),  # Safely formatted date object string
+                            "dob": n_dob.strftime("%Y-%m-%d"),
                             "blood_group": None if n_blood == 'Not Identified' else n_blood,
                             "phone": clean_n_phone,
                             "email": clean_n_email,
@@ -732,9 +738,10 @@ else:
                             "current_address": final_n_addr
                         })
 
+                        # Save the banner data token into state memory
+                        st.session_state.roster_success_msg = "📩 **Addition Request Staged successfully!** The new profile has been sent to the committee queue for approval. Once reviewed by an administrator, your household summary page will be refreshed."
+
                         db.update_family_verification_state(f_id, "Pending Update")
-                        st.success(
-                            "📩 **Addition Request Staged successfully!** The new profile has been sent to the committee queue for approval. Once reviewed by an administrator, your household summary page will be refreshed.")
                         st.rerun()
 
     # ---- TAB 3: THE SEPARATE PROGRESSIVE VERIFICATION TUNNEL PANEL ----
