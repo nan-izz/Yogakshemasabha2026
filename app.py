@@ -256,22 +256,115 @@ elif st.session_state.is_admin:
             st.write("---")
             st.subheader("📝 Pending Profile Core Alterations")
             pending_data = db.fetch_pending_approvals()
+
+            # User-friendly column name translation dictionary
+            FIELD_MAP = {
+            "head_of_family": "Household Head Name",
+            "illam_name": "Illam Name",
+            "gothram": "Gothram",
+            "address": "Master Address",
+            "name": "Member Name",
+            "relation": "Relationship to Head",
+            "dob": "Date of Birth",
+            "blood_group": "Blood Group",
+            "phone": "Phone Number",
+            "email": "Email Address",
+            "qualification": "Educational Qualification",
+            "job": "Occupation / Job",
+            "adhaar": "Aadhaar Number",
+            "current_address": "Current Residential Address"
+            }
+
             for req in pending_data:
-                req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], req[
-                    "action_type"], req["change_payload"] or {}, req["target_id"]
+                req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], req["action_type"], \
+                req["change_payload"] or {}, req["target_id"]
+
+                # Filter out system primary/foreign keys that basic users don't see
+                hidden_keys = ["family_id", "member_id", "id", "updated_at", "created_at", "verification_status"]
+                display_payload = {FIELD_MAP.get(k, k): v for k, v in payload.items() if
+                               k not in hidden_keys and v is not None}
+
                 with st.container(border=True):
                     st.markdown(f"#### ✉️ Request #{req_id}: **{action}** on **{table.upper()}**")
-                    st.dataframe(pd.DataFrame([payload]), use_container_width=True, hide_index=True)
+                    st.caption(f"Submitted by: {req['requested_by']}")
+
+                # 🟢 SCENARIO 1: NEW ENTRY (INSERT)
+                    if action == "INSERT":
+                        st.info("✨ **Action Type: New Profile Registration Request**")
+                        st.markdown("**Below is the full data that will be added to the registry:**")
+
+                        # Display data cleanly in a two-column structural grid
+                        idx_c1, idx_c2 = st.columns(2)
+                        for i, (k, v) in enumerate(display_payload.items()):
+                            with idx_c1 if i % 2 == 0 else idx_c2:
+                                st.markdown(f"🔹 **{k}:** {v}")
+
+                    # 🔴 SCENARIO 2: REMOVAL OPERATION (DELETE)
+                    elif action == "DELETE":
+                        st.error("🗑️ **Action Type: Profile Deletion Request**")
+                        st.markdown("**The following registered entity profile is targeted for permanent removal:**")
+
+                        # Grab context identifiers safely based on targeted table mapping
+                        entity_title = payload.get("name") or payload.get("head_of_family") or f"ID #{target_row_id}"
+                        st.markdown(
+                        f"⚠️ **Target Entity:** <span style='font-size:16px; font-weight:700; color:#ff4b4b;'>{entity_title}</span>",
+                        unsafe_allow_html=True)
+                        if "relation" in payload:
+                            st.markdown(f"🔹 *Relationship Alignment:* {payload['relation']}")
+
+                    # 🟡 SCENARIO 3: MODIFICATION DELTA (UPDATE)
+                    elif action == "UPDATE":
+                        st.warning("🔄 **Action Type: Profile Modification Request**")
+                        st.markdown("**Changes requested inside this record:**")
+
+                        #Fetch the original master record from the database to compare differences
+                        if table == "families":
+                            current_master = db.fetch_single_family(target_row_id)
+                            context_name = f"Household: {current_master.get('head_of_family')} | ഇല്ലം: {current_master.get('illam_name')}"
+                        else:
+                            # Pull individual member context info
+                            m_lookup = db.supabase.table("members").select("*").eq("member_id", target_row_id).execute()
+                            current_master = m_lookup.data[0] if m_lookup.data else {}
+                            context_name = f"Member Profile: **{current_master.get('name', 'Unknown')}** ({current_master.get('relation', 'Member')})"
+
+                        st.markdown(f"📍 **Target Profile Context:** {context_name}")
+                        st.write("")
+
+                        # Build a dynamic comparison checklist matrix table layout
+                        comp_rows = []
+                        for raw_key, new_val in payload.items():
+                            if raw_key in hidden_keys: continue
+
+                            old_val = current_master.get(raw_key, "N/A")
+                            # Normalize comparisons to avoid blank space string mismatches
+                            if str(old_val).strip() == "" or old_val is None: old_val = "*(Empty / Unconfigured)*"
+                            if str(new_val).strip() == "" or new_val is None: new_val = "*(Set to Blank / Clear)*"
+
+                            if str(old_val) != str(new_val):
+                                friendly_key = FIELD_MAP.get(raw_key, raw_key)
+                                comp_rows.append({
+                                "Modified Property Field": friendly_key,
+                                "🔴 Current Value on Live Server": str(old_val),
+                                "🟢 New Proposed Value Overwrite": str(new_val)
+                                })
+
+                        if comp_rows:
+                            st.table(pd.DataFrame(comp_rows))
+                        else:
+                            st.info(
+                            "ℹ️ No textual property differences discovered. (User submitted layout form without overwriting entries)")
+
+                    st.write("")
                     c1, c2 = st.columns(2)
                     with c1:
                         if st.button("👍 Approve Change", key=f"appr_{req_id}"):
                             db.process_approval_action(req_id, action, table, payload, target_row_id)
-                            if table == "members":
+                            if table == "members" and target_row_id:
                                 m_look = db.supabase.table("members").select("family_id").eq("member_id",
-                                                                                             target_row_id).execute()
+                                                                                         target_row_id).execute()
                                 if m_look.data: db.update_family_verification_state(m_look.data[0]["family_id"],
-                                                                                    "Pending Update")
-                            st.success("Approved!")
+                                                                                "Pending Update")
+                            st.success("Changes approved successfully!")
                             st.rerun()
                     with c2:
                         if st.button("👎 Reject Change", key=f"rej_{req_id}"):
@@ -553,145 +646,137 @@ else:
         st.session_state.roster_success_msg = None
     user_tabs = st.tabs(["🏡 Household Profile", "👥 Family Members Roster", "📋 Verify & Settle Dues"])
 
-    # ---- TAB 1: HOUSEHOLD IDENTITY HEADER ----
+    # ---- TAB 1: HOUSEHOLD IDENTITY HEADER (STAGED FOR ADMINISTRATIVE APPROVAL) ----
     with user_tabs[0]:
         st.write("")
         with st.form("edit_family_header_modular_form"):
-            h_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name)", value=family_data.get('head_of_family', ''))
-            h_illam = st.text_input("ഇല്ലപ്പേര് (Illam Name)", value=family_data.get('illam_name', ''))
-            h_goth = st.text_input("ഗോത്രം (Gothram)", value=family_data.get('gothram', ''))
-            h_addr = st.text_area("മേൽവിലാസം (Address)", value=family_data.get('address', ''))
-            if st.form_submit_button("💾 Save Household Information"):
-                db.update_family_header(f_id, h_head.strip(), h_illam.strip(), h_goth.strip(), h_addr.strip())
-                st.success("Household information updated successfully!")
-                st.rerun()
+            st.markdown("#### 🛠️ Request Changes to Household Core Information")
 
-    # ---- TAB 2: MEMBERS MANAGEMENT ROSTER ----
+            h_head = st.text_input("ഗൃഹനാഥന്റെ പേര് (Head of Family Name) *",
+                                   value=family_data.get('head_of_family', ''))
+            h_illam = st.text_input("ഇല്ലപ്പേര് (Illam Name) *", value=family_data.get('illam_name', ''))
+            h_goth = st.text_input("ഗോത്രം (Gothram)", value=family_data.get('gothram', ''))
+            h_addr = st.text_area("മേൽവിലാസം (Address) *", value=family_data.get('address', ''))
+
+            if st.form_submit_button("💾 Submit Profile Updates to Committee"):
+                if h_head.strip() == "" or h_illam.strip() == "" or h_addr.strip() == "":
+                    st.error("❌ Mandatory parameters (Head Name, Illam Name, and Address) cannot be left blank.")
+                else:
+                    # ROUTE TO QUEUE: Instead of db.update_family_header, we pass it to the staging queue
+                    db.submit_pending_approval(
+                        table="families",
+                        action="UPDATE",
+                        requested_by=st.session_state.auth_email,
+                        payload={
+                            "head_of_family": h_head.strip(),
+                            "illam_name": h_illam.strip(),
+                            "gothram": h_goth.strip() if h_goth.strip() != "" else None,
+                            "address": h_addr.strip()
+                        },
+                        target_id=f_id
+                    )
+
+                    # Store the custom persistent notification string into session memory
+                    st.session_state.roster_success_msg = "📩 **Household Changes Staged Successfully!** Your core header updates have been submitted to the committee queue for review. You will see them applied once an administrator signs off."
+
+                    # Set the workflow timeline map status back to Step 1
+                    db.update_family_verification_state(f_id, "Pending Update")
+                    st.rerun()
+
+            # ---- TAB 2: MEMBERS MANAGEMENT ROSTER (FIXED SINGLE-CARD SAVING) ----
     with user_tabs[1]:
         st.write("")
         header_address = family_data.get('address', '').strip()
 
-        with st.form("bulk_member_update_modular_form"):
-            member_references = []
-            if not members_data:
-                st.info("ℹ️ No family members mapped yet.")
-            else:
-                for m in members_data:
-                    m_id = m['member_id']
-                    with st.container(border=True):
-                        st.markdown(f"#### 👤 {m['name']} ({m['relation'] or 'Member'})")
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            m_name = st.text_input("Name *", value=m.get('name', ''), key=f"u_nm_{m_id}")
-                            m_rel = st.text_input("Relation *", value=m.get('relation', ''), key=f"u_rl_{m_id}")
-                            try:
-                                parsed_dob = datetime.datetime.strptime(str(m.get('dob', '1990-01-01')),
-                                                                        "%Y-%m-%d").date()
-                            except:
-                                parsed_dob = datetime.date(1990, 1, 1)
-                            m_dob = st.date_input("DOB *", value=parsed_dob, key=f"u_db_{m_id}")
+        if not members_data:
+            st.info("ℹ️ No family members mapped yet.")
+        else:
+            # Notice: The giant global st.form container has been removed from here!
+            for m in members_data:
+                m_id = m['member_id']
+
+                # Each member profile gets their own independent isolated form container
+                with st.form(key=f"user_member_form_standalone_{m_id}"):
+                    st.markdown(f"#### 👤 {m['name']} ({m['relation'] or 'Member'})")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        m_name = st.text_input("Name *", value=m.get('name', ''))
+                        m_rel = st.text_input("Relation *", value=m.get('relation', ''))
+                        try:
+                            parsed_dob = datetime.datetime.strptime(str(m.get('dob', '1990-01-01')),
+                                                                            "%Y-%m-%d").date()
+                        except:
+                            parsed_dob = datetime.date(1990, 1, 1)
+                            m_dob = st.date_input("DOB *", value=parsed_dob)
                             m_bg = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS,
-                                                index=auth.BLOOD_GROUPS.index(m['blood_group']) if m.get(
-                                                    'blood_group') in auth.BLOOD_GROUPS else 0, key=f"u_bg_{m_id}")
-                        with c2:
-                            m_phone = st.text_input("Phone Number",
-                                                    value=str(m.get('phone', '')) if m.get('phone') else '',
-                                                    key=f"u_ph_{m_id}")
-                            m_email = st.text_input("Email", value=m.get('email', '') or '', key=f"u_em_{m_id}")
-                            m_qual = st.text_input("Qualification", value=m.get('qualification', '') or '',
-                                                   key=f"u_ql_{m_id}")
-                            m_job = st.text_input("Job / Occupation", value=m.get('job', '') or '', key=f"u_jb_{m_id}")
+                                                    index=auth.BLOOD_GROUPS.index(m['blood_group']) if m.get(
+                                                        'blood_group') in auth.BLOOD_GROUPS else 0)
+                    with c2:
+                        m_phone = st.text_input("Phone Number",
+                                                        value=str(m.get('phone', '')) if m.get('phone') else '')
+                        m_email = st.text_input("Email", value=m.get('email', '') or '')
+                        m_qual = st.text_input("Qualification", value=m.get('qualification', '') or '')
+                        m_job = st.text_input("Job / Occupation", value=m.get('job', '') or '')
 
-                        st.write("---")
-                        m_adhaar = st.text_input("Aadhaar Number",
-                                                 value=str(m.get('adhaar', '')) if m.get('adhaar') else '',
-                                                 key=f"u_ad_{m_id}")
-                        is_same_initial = (
-                                    m.get('current_address', '').strip() == header_address or m.get('current_address',
-                                                                                                    '').strip() == "")
+                    st.write("---")
+                    m_adhaar = st.text_input("Aadhaar Number",
+                                                     value=str(m.get('adhaar', '')) if m.get('adhaar') else '')
+                    is_same_initial = (m.get('current_address', '').strip() == header_address or m.get(
+                                'current_address', '').strip() == "")
 
-                        m_addr_sel = st.radio("Current Address Context Selector",
-                                              options=["Same as Household Address", "Custom Address"],
-                                              index=0 if is_same_initial else 1, key=f"u_rad_{m_id}")
+                    m_addr_sel = st.radio("Current Address Context Selector",
+                                                  options=["Same as Household Address", "Custom Address"],
+                                                  index=0 if is_same_initial else 1, key=f"addr_rad_{m_id}")
 
-                        if m_addr_sel == "Custom Address":
-                            m_caddr = st.text_area("Enter Custom Current Address",
-                                                   value=m.get('current_address', '') if not is_same_initial else "",
-                                                   key=f"u_txa_{m_id}")
-                        else:
-                            m_caddr = ""
+                    if m_addr_sel == "Custom Address":
+                        m_caddr = st.text_area("Enter Custom Current Address", value=m.get('current_address',
+                                                                                                   '') if not is_same_initial else "")
+                    else:
+                        m_caddr = ""
 
-                        st.write("")
-                        m_delete_tick = st.checkbox("🗑️ Request Deletion of this Member Record",
-                                                    key=f"u_deltick_{m_id}")
+                    st.write("")
+                    m_delete_tick = st.checkbox("🗑️ Request Deletion of this Member Record")
 
-                        member_references.append({
-                            "member_id": m_id, "name": m_name, "relation": m_rel, "dob": m_dob,
-                            "blood_group": m_bg, "phone": m_phone, "email": m_email,
-                            "qualification": m_qual, "job": m_job, "adhaar": m_adhaar,
-                            "addr_sel": m_addr_sel, "custom_addr": m_caddr, "should_delete": m_delete_tick
-                        })
-
-            st.write("")
-            if st.form_submit_button("💾 Process All Roster Modifications / Deletions"):
-                has_errors = False
-                staged_count = 0
-
-                # Pre-validate all cards first to ensure data integrity before writing to Supabase
-                for r in member_references:
-                    if not r["should_delete"]:
-                        is_valid, clean_a = auth.validate_aadhaar(r["adhaar"])
-                        if r["name"].strip() == "" or r["relation"].strip() == "":
-                            st.error(
-                                f"❌ Mandatory parameters (Name/Relation) are missing on member card: **{r['name']}**")
-                            has_errors = True
-                        elif r["adhaar"].strip() != "" and not is_valid:
-                            st.error(
-                                f"❌ Invalid Aadhaar number syntax on member card: **{r['name']}**. It must be exactly 12 numeric digits.")
-                            has_errors = True
-
-                # If all cards pass validation checks, process the batch queue submission
-                if not has_errors:
-                    for r in member_references:
-                        if r["should_delete"]:
+                    # This save button ONLY processes this specific individual card!
+                    if st.form_submit_button(f"💾 Save Changes for {m['name']}"):
+                        if m_delete_tick:
                             db.submit_pending_approval("members", "DELETE", st.session_state.auth_email,
-                                                       {"name": r['name']}, target_id=r["member_id"])
-                            staged_count += 1
+                                                               {"name": m_name}, target_id=m_id)
+                            st.session_state.roster_success_msg = f"📩 **Deletion Request Staged!** Request to remove {m_name} sent to the committee queue."
+                            db.update_family_verification_state(f_id, "Pending Update")
+                            st.rerun()
                         else:
-                            _, clean_a = auth.validate_aadhaar(r["adhaar"])
-                            final_m_addr = header_address if r["addr_sel"] == "Same as Household Address" else r[
-                                "custom_addr"].strip()
+                            is_valid, clean_a = auth.validate_aadhaar(m_adhaar)
+                            if m_name.strip() == "" or m_rel.strip() == "":
+                                st.error("❌ Name and Relation are mandatory fields.")
+                            elif m_adhaar.strip() != "" and not is_valid:
+                                st.error(
+                                    "❌ Invalid Aadhaar number syntax. It must be exactly 12 numeric digits.")
+                            else:
+                                final_m_addr = header_address if m_addr_sel == "Same as Household Address" else m_caddr.strip()
 
-                            # CRITICAL DATA SCRUBBING FOR TYPE-CASTING RULES
-                            # Force completely empty optional inputs into pure Python None data objects
-                            clean_phone = r["phone"].strip() if r["phone"] and r["phone"].strip() != "" else None
-                            clean_adh = clean_a if clean_a and clean_a.strip() != "" else None
-                            clean_email = r["email"].strip() if r["email"] and r["email"].strip() != "" else None
-                            clean_qual = r["qualification"].strip() if r["qualification"] and r[
-                                "qualification"].strip() != "" else None
-                            clean_job = r["job"].strip() if r["job"] and r["job"].strip() != "" else None
+                                clean_phone = m_phone.strip() if m_phone and m_phone.strip() != "" else None
+                                clean_adh = clean_a if clean_a and clean_a.strip() != "" else None
+                                clean_email = m_email.strip() if m_email and m_email.strip() != "" else None
+                                clean_qual = m_qual.strip() if m_qual and m_qual.strip() != "" else None
+                                clean_job = m_job.strip() if m_job and m_job.strip() != "" else None
 
-                            db.submit_pending_approval("members", "UPDATE", st.session_state.auth_email, {
-                                "name": r["name"].strip(),
-                                "relation": r["relation"].strip(),
-                                "dob": r["dob"].strftime("%Y-%m-%d"),
-                                "blood_group": None if r["blood_group"] == 'Not Identified' else r["blood_group"],
-                                "phone": clean_phone,
-                                "email": clean_email,
-                                "qualification": clean_qual,
-                                "job": clean_job,
-                                "adhaar": clean_adh,
-                                "current_address": final_m_addr
-                            }, target_id=r["member_id"])
-                            staged_count += 1
+                                db.submit_pending_approval("members", "UPDATE", st.session_state.auth_email, {
+                                            "name": m_name.strip(),
+                                            "relation": m_rel.strip(),
+                                            "dob": m_dob.strftime("%Y-%m-%d"),
+                                            "blood_group": None if m_bg == 'Not Identified' else m_bg,
+                                            "phone": clean_phone,
+                                            "email": clean_email,
+                                            "qualification": clean_qual,
+                                            "job": clean_job,
+                                            "adhaar": clean_adh,
+                                            "current_address": final_m_addr
+                                        }, target_id=m_id)
 
-                    if staged_count > 0:
-                        # Save the confirmation alert text inside session memory state
-                        st.session_state.roster_success_msg = "📩 **Changes Staged Successfully!** Your modifications have been submitted to the committee queue for approval. Once the review is completed, you will receive a notification alert here instantly."
-
-                        # Reset the dynamic process map tracker step
-                        db.update_family_verification_state(f_id, "Pending Update")
-                        st.rerun()
+                                st.session_state.roster_success_msg = f"📩 **Changes Staged Successfully!** Modifications for **{m_name}** sent to the committee queue."
+                                db.update_family_verification_state(f_id, "Pending Update")
+                                st.rerun()
 
         with st.expander("➕ Request Adding a New Member to this Household"):
             n_name = st.text_input("Full Name *", key="n_name")
