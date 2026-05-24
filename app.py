@@ -318,146 +318,228 @@ elif st.session_state.is_admin:
                 update_bucket = [x for x in pending_data if x["action_type"] == "UPDATE"]
                 delete_bucket = [x for x in pending_data if x["action_type"] == "DELETE"]
 
-                # Create organized sub-tabs for each operation bucket
-                bucket_tabs = st.tabs([f"✨ New Onboarding Registrations ({len(insert_bucket)})",
-                                       f"🔄 Structural Updates ({len(update_bucket)})",
-                                       f"🗑️ Removal Requests ({len(delete_bucket)})"])
 
-                # Initialize request tracking selection state
+
+                # Create organized sub-tabs for each operation bucket
+                tab_ins, tab_upd, tab_del = st.tabs([
+                    f"✨ New Onboarding Registrations ({len(insert_bucket)})",
+                    f"🔄 Structural Updates ({len(update_bucket)})",
+                    f"🗑️ Removal Requests ({len(delete_bucket)})"
+                ])
+
                 if "sel_req_ids" not in st.session_state:
                     st.session_state.sel_req_ids = []
 
-                for b_idx, active_bucket in enumerate([insert_bucket, update_bucket, delete_bucket]):
-                    with bucket_tabs[b_idx]:
-                        if not active_bucket:
-                            st.info("No processing entries inside this operational category bucket.")
-                        else:
-                            bucket_ids = [x['approval_id'] for x in active_bucket]
+                # =====================================================================
+                # 🛠️ SUB-TAB 1: NEW ONBOARDING REGISTRATIONS
+                # =====================================================================
+                with tab_ins:
+                    if not insert_bucket:
+                        st.info("No processing entries inside this operational category bucket.")
+                    else:
+                        ins_ids = [x['approval_id'] for x in insert_bucket]
+                        col_i1, col_i2 = st.columns(2)
+                        with col_i1:
+                            if st.button("🔘 Select All Registrations", key="ctrl_all_ins_btn",
+                                         use_container_width=True):
+                                st.session_state.sel_req_ids = list(set(st.session_state.sel_req_ids + ins_ids))
+                                st.rerun()
+                        with col_i2:
+                            if st.button("⚪ Deselect All Registrations", key="ctrl_clr_ins_btn",
+                                         use_container_width=True):
+                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                x not in ins_ids]
+                                st.rerun()
 
-                            col_bctrl1, col_bctrl2 = st.columns(2)
-                            with col_bctrl1:
-                                if st.button("🔘 Select All in Bucket", key=f"all_b_trigger_{b_idx}",
-                                             use_container_width=True):
-                                    st.session_state.sel_req_ids = list(set(st.session_state.sel_req_ids + bucket_ids))
-                                    st.rerun()
-                            with col_bctrl2:
-                                if st.button("⚪ Deselect All in Bucket", key=f"clear_b_trigger_{b_idx}",
-                                             use_container_width=True):
+                        for req in insert_bucket:
+                            req_id, table, action, payload = req["approval_id"], req["target_table"], req[
+                                "action_type"], req["change_payload"] or {}
+                            is_checked = req_id in st.session_state.sel_req_ids
+                            with st.container(border=True):
+                                bc1, bc2 = st.columns([1, 20])
+                                with bc1:
+                                    r_box = st.checkbox("", value=is_checked, key=f"reqbox_ins_tab_{req_id}")
+                                    if r_box and req_id not in st.session_state.sel_req_ids:
+                                        st.session_state.sel_req_ids.append(req_id)
+                                    elif not r_box and req_id in st.session_state.sel_req_ids:
+                                        st.session_state.sel_req_ids.remove(req_id)
+                                with bc2:
+                                    st.markdown(
+                                        f"##### Request #{req_id} ({table.upper()}) | By: {req['requested_by']}")
+                                    display_payload = {FIELD_MAP.get(k, k): v for k, v in payload.items() if
+                                                       k not in hidden_keys and v is not None}
+                                    idx_c1, idx_c2 = st.columns(2)
+                                    for i, (k, v) in enumerate(display_payload.items()):
+                                        with idx_c1 if i % 2 == 0 else idx_c2: st.markdown(f"🔹 **{k}:** {v}")
+
+                        # Action Buttons for checked items in this tab
+                        ins_selected = [x for x in st.session_state.sel_req_ids if x in ins_ids]
+                        if ins_selected:
+                            st.write("")
+                            b1, b2 = st.columns(2)
+                            with b1:
+                                if st.button(f"👍 Approve Checked ({len(ins_selected)}) Registrations",
+                                             key="final_action_app_ins", type="primary", use_container_width=True):
+                                    db.process_batch_approval_actions(ins_selected, "APPROVE")
                                     st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
-                                                                    x not in bucket_ids]
+                                                                    x not in ins_selected]
+                                    st.rerun()
+                            with b2:
+                                if st.button(f"👎 Reject Checked ({len(ins_selected)}) Registrations",
+                                             key="final_action_rej_ins", use_container_width=True):
+                                    db.process_batch_approval_actions(ins_selected, "REJECT")
+                                    st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                    x not in ins_selected]
                                     st.rerun()
 
-                            # Display items inside the active bucket
-                            for req in active_bucket:
-                                req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], \
-                                req["action_type"], req["change_payload"] or {}, req["target_id"]
+                # =====================================================================
+                # 🛠️ SUB-TAB 2: STRUCTURAL UPDATES
+                # =====================================================================
+                with tab_upd:
+                    if not update_bucket:
+                        st.info("No processing entries inside this operational category bucket.")
+                    else:
+                        upd_ids = [x['approval_id'] for x in update_bucket]
+                        col_u1, col_u2 = st.columns(2)
+                        with col_u1:
+                            if st.button("🔘 Select All Updates", key="ctrl_all_upd_btn", use_container_width=True):
+                                st.session_state.sel_req_ids = list(set(st.session_state.sel_req_ids + upd_ids))
+                                st.rerun()
+                        with col_u2:
+                            if st.button("⚪ Deselect All Updates", key="ctrl_clr_upd_btn", use_container_width=True):
+                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                x not in upd_ids]
+                                st.rerun()
 
-                                # FIXED BOUND CHECK CONDITION
-                                is_req_checked = req_id in st.session_state.sel_req_ids
+                        for req in update_bucket:
+                            req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], \
+                            req["action_type"], req["change_payload"] or {}, req["target_id"]
+                            is_checked = req_id in st.session_state.sel_req_ids
+                            with st.container(border=True):
+                                bc1, bc2 = st.columns([1, 20])
+                                with bc1:
+                                    r_box = st.checkbox("", value=is_checked, key=f"reqbox_upd_tab_{req_id}")
+                                    if r_box and req_id not in st.session_state.sel_req_ids:
+                                        st.session_state.sel_req_ids.append(req_id)
+                                    elif not r_box and req_id in st.session_state.sel_req_ids:
+                                        st.session_state.sel_req_ids.remove(req_id)
+                                with bc2:
+                                    st.markdown(
+                                        f"##### Request #{req_id} ({table.upper()}) | By: {req['requested_by']}")
+                                    if table == "families":
+                                        current_master = db.fetch_single_family(target_row_id)
+                                        context_name = f"Household Header: **{current_master.get('head_of_family')}** (Illam: {current_master.get('illam_name')})"
+                                    else:
+                                        m_lookup = db.supabase.table("members").select("*").eq("member_id",
+                                                                                               target_row_id).execute()
+                                        current_master = m_lookup.data[0] if m_lookup.data else {}
+                                        context_name = f"Member Record: **{current_master.get('name', 'Unknown')}** ({current_master.get('relation', 'Member')})"
 
-                                with st.container(border=True):
-                                    bc1, bc2 = st.columns([1, 20])
-                                    with bc1:
-                                        # Explicit unique state key injection stops streamlit component recycling errors
-                                        req_box = st.checkbox("", value=is_req_checked,
-                                                              key=f"reqbox_live_state_{req_id}")
-                                        if req_box and req_id not in st.session_state.sel_req_ids:
-                                            st.session_state.sel_req_ids.append(req_id)
-                                        elif not req_box and req_id in st.session_state.sel_req_ids:
-                                            st.session_state.sel_req_ids.remove(req_id)
-                                    with bc2:
+                                    st.markdown(f"📍 **Target Profile:** {context_name}")
+                                    comp_rows = []
+                                    for raw_key, new_val in payload.items():
+                                        if raw_key in hidden_keys: continue
+                                        old_val = current_master.get(raw_key, "N/A")
+                                        check_old = "" if old_val is None or str(old_val).strip() == "" or str(
+                                            old_val).lower() == "none" else str(old_val).strip()
+                                        check_new = "" if new_val is None or str(new_val).strip() == "" or str(
+                                            new_val).lower() == "none" else str(new_val).strip()
+
+                                        if check_old != check_new:
+                                            comp_rows.append({
+                                                "Property Field": FIELD_MAP.get(raw_key, raw_key),
+                                                "🔴 Live Value": "*(Empty)*" if check_old == "" else check_old,
+                                                "🟢 Proposed Value": "*(Blank)*" if check_new == "" else check_new
+                                            })
+                                    if comp_rows: st.table(pd.DataFrame(comp_rows))
+
+                        # Action Buttons for checked items in this tab
+                        upd_selected = [x for x in st.session_state.sel_req_ids if x in upd_ids]
+                        if upd_selected:
+                            st.write("")
+                            b1, b2 = st.columns(2)
+                            with b1:
+                                if st.button(f"👍 Approve Checked ({len(upd_selected)}) Updates",
+                                             key="final_action_app_upd", type="primary", use_container_width=True):
+                                    db.process_batch_approval_actions(upd_selected, "APPROVE")
+                                    st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                    x not in upd_selected]
+                                    st.rerun()
+                            with b2:
+                                if st.button(f"👎 Reject Checked ({len(upd_selected)}) Updates",
+                                             key="final_action_rej_upd", use_container_width=True):
+                                    db.process_batch_approval_actions(upd_selected, "REJECT")
+                                    st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                    x not in upd_selected]
+                                    st.rerun()
+
+                # =====================================================================
+                # 🛠️ SUB-TAB 3: REMOVAL REQUESTS
+                # =====================================================================
+                with tab_del:
+                    if not delete_bucket:
+                        st.info("No processing entries inside this operational category bucket.")
+                    else:
+                        del_ids = [x['approval_id'] for x in delete_bucket]
+                        col_d1, col_d2 = st.columns(2)
+                        with col_d1:
+                            if st.button("🔘 Select All Removals", key="ctrl_all_del_btn", use_container_width=True):
+                                st.session_state.sel_req_ids = list(set(st.session_state.sel_req_ids + del_ids))
+                                st.rerun()
+                        with col_d2:
+                            if st.button("⚪ Deselect All Removals", key="ctrl_clr_del_btn", use_container_width=True):
+                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                x not in del_ids]
+                                st.rerun()
+
+                        for req in delete_bucket:
+                            req_id, table, action, target_row_id = req["approval_id"], req["target_table"], req[
+                                "action_type"], req["target_id"]
+                            is_checked = req_id in st.session_state.sel_req_ids
+                            with st.container(border=True):
+                                bc1, bc2 = st.columns([1, 20])
+                                with bc1:
+                                    r_box = st.checkbox("", value=is_checked, key=f"reqbox_del_tab_{req_id}")
+                                    if r_box and req_id not in st.session_state.sel_req_ids:
+                                        st.session_state.sel_req_ids.append(req_id)
+                                    elif not r_box and req_id in st.session_state.sel_req_ids:
+                                        st.session_state.sel_req_ids.remove(req_id)
+                                with bc2:
+                                    st.markdown(
+                                        f"##### Request #{req_id} ({table.upper()}) | By: {req['requested_by']}")
+                                    if table == "members":
+                                        m_info = db.supabase.table("members").select("*").eq("member_id",
+                                                                                             target_row_id).execute()
+                                        m_data = m_info.data[0] if m_info.data else {}
+                                        f_info = db.fetch_single_family(m_data.get("family_id", 0)) if m_data else {}
+                                        st.error(f"⚠️ **Target Member for Removal:** **{m_data.get('name', 'N/A')}**")
                                         st.markdown(
-                                            f"##### Request #{req_id} ({table.upper()}) | Submitted by: {req['requested_by']}")
+                                            f"🏠 *Household Unit:* **{f_info.get('head_of_family', 'N/A')}** | *Illam:* {f_info.get('illam_name', 'N/A')}")
+                                    else:
+                                        f_data = db.fetch_single_family(target_row_id)
+                                        st.error(
+                                            f"⚠️ **Target Household Unit for Complete Deletion:** **{f_data.get('head_of_family', 'N/A')}**")
+                                        st.write(f"🏠 *Address Block Line:* {f_data.get('address', 'N/A')}")
 
-                                        # BUCKET SCENARIO 1: NEW ENTRY (INSERT)
-                                        if action == "INSERT":
-                                            display_payload = {FIELD_MAP.get(k, k): v for k, v in payload.items() if
-                                                               k not in hidden_keys and v is not None}
-                                            idx_c1, idx_c2 = st.columns(2)
-                                            for i, (k, v) in enumerate(display_payload.items()):
-                                                with idx_c1 if i % 2 == 0 else idx_c2:
-                                                    st.markdown(f"🔹 **{k}:** {v}")
-
-                                        # BUCKET SCENARIO 2: REMOVAL OPERATION (DELETE)
-                                        elif action == "DELETE":
-                                            if table == "members":
-                                                m_info = db.supabase.table("members").select("*").eq("member_id",
-                                                                                                     target_row_id).execute()
-                                                m_data = m_info.data[0] if m_info.data else {}
-                                                f_info = db.fetch_single_family(
-                                                    m_data.get("family_id", 0)) if m_data else {}
-
-                                                st.error(
-                                                    f"⚠️ **Target Profile Targeted for Permanent Removal:** **{m_data.get('name', 'N/A')}**")
-                                                st.markdown(
-                                                    f"🏠 *Belongs to Household Unit:* **{f_info.get('head_of_family', 'N/A')}** | Traditional Ancestral Illam: *{f_info.get('illam_name', 'N/A')}*")
-                                                st.write(
-                                                    f"🔹 **Relationship Context:** {m_data.get('relation', 'N/A')} | **DOB:** {m_data.get('dob', 'N/A')} | **Phone:** {m_data.get('phone', 'N/A')}")
-                                            else:
-                                                f_data = db.fetch_single_family(target_row_id)
-                                                st.error(
-                                                    f"⚠️ **Target Household Unit Targeted for Complete Deletion:** **{f_data.get('head_of_family', 'N/A')}**")
-                                                st.write(
-                                                    f"🏠 *Address Block Line:* {f_data.get('address', 'N/A')} | *Illam:* {f_data.get('illam_name', 'N/A')}")
-
-                                        # BUCKET SCENARIO 3: MODIFICATION DELTA (UPDATE)
-                                        elif action == "UPDATE":
-                                            if table == "families":
-                                                current_master = db.fetch_single_family(target_row_id)
-                                                context_name = f"Household Profile Header: **{current_master.get('head_of_family')}** (Illam Name: {current_master.get('illam_name')})"
-                                            else:
-                                                m_lookup = db.supabase.table("members").select("*").eq("member_id",
-                                                                                                       target_row_id).execute()
-                                                current_master = m_lookup.data[0] if m_lookup.data else {}
-                                                context_name = f"Member Profile Record: **{current_master.get('name', 'Unknown')}** ({current_master.get('relation', 'Member')})"
-
-                                            st.markdown(f"📍 **Target Profile:** {context_name}")
-
-                                            comp_rows = []
-                                            for raw_key, new_val in payload.items():
-                                                if raw_key in hidden_keys: continue
-                                                old_val = current_master.get(raw_key, "N/A")
-
-                                                check_old = "" if old_val is None or str(old_val).strip() == "" or str(
-                                                    old_val).lower() == "none" else str(old_val).strip()
-                                                check_new = "" if new_val is None or str(new_val).strip() == "" or str(
-                                                    new_val).lower() == "none" else str(new_val).strip()
-
-                                                if check_old != check_new:
-                                                    comp_rows.append({
-                                                        "Property Field": FIELD_MAP.get(raw_key, raw_key),
-                                                        "🔴 Live Current Value": "*(Empty)*" if check_old == "" else check_old,
-                                                        "🟢 Proposed Value": "*(Blank)*" if check_new == "" else check_new
-                                                    })
-                                            if comp_rows: st.table(pd.DataFrame(comp_rows))
-
-                                    # Global operations control bar for checked items in this bucket
-                                    bucket_selected_ids = [x for x in st.session_state.sel_req_ids if x in bucket_ids]
-                                    if bucket_selected_ids:
-                                        st.write("")
-                                        col_bact1, col_bact2 = st.columns(2)
-
-                                        # Assign names dynamically to create completely unique key strings
-                                        bucket_name_key = "insert" if b_idx == 0 else "update" if b_idx == 1 else "delete"
-
-                                        with col_bact1:
-                                            # FIXED: key now resolves to uniquely structured strings like 'b_app_btn_final_insert'
-                                            if st.button(f"👍 Approve Checked ({len(bucket_selected_ids)}) Requests",
-                                                         key=f"b_app_btn_final_{bucket_name_key}", type="primary",
-                                                         use_container_width=True):
-                                                db.process_batch_approval_actions(bucket_selected_ids, "APPROVE")
-                                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids
-                                                                                if x not in bucket_selected_ids]
-                                                st.rerun()
-                                        with col_bact2:
-                                            # FIXED: key now resolves to uniquely structured strings like 'b_rej_btn_final_insert'
-                                            if st.button(f"👎 Reject Checked ({len(bucket_selected_ids)}) Requests",
-                                                         key=f"b_rej_btn_final_{bucket_name_key}",
-                                                         use_container_width=True):
-                                                db.process_batch_approval_actions(bucket_selected_ids, "REJECT")
-                                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids
-                                                                                if x not in bucket_selected_ids]
-                                                st.rerun()
+                        # Action Buttons for checked items in this tab
+                        del_selected = [x for x in st.session_state.sel_req_ids if x in del_ids]
+                        if del_selected:
+                            st.write("")
+                            b1, b2 = st.columns(2)
+                            with b1:
+                                if st.button(f"👍 Approve Checked ({len(del_selected)}) Removals",
+                                             key="final_action_app_del", type="primary", use_container_width=True):
+                                    db.process_batch_approval_actions(del_selected, "APPROVE")
+                                    st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                    x not in del_selected]
+                                    st.rerun()
+                            with b2:
+                                if st.button(f"👎 Reject Checked ({len(del_selected)}) Removals",
+                                             key="final_action_rej_del", use_container_width=True):
+                                    db.process_batch_approval_actions(del_selected, "REJECT")
+                                    st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                    x not in del_selected]
+                                    st.rerun()
         # ---- ADMIN TAB 2: GLOBAL DIRECTORY SEARCH MATRIX (EDITABLE TARGET VIEWS RESTORED) ----
         with admin_tab[1]:
             st.header("Global Directory Master Tracking View")
