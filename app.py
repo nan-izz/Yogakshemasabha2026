@@ -511,19 +511,66 @@ elif st.session_state.is_admin:
                                 with bc2:
                                     st.markdown(
                                         f"##### Request #{req_id} ({table.upper()}) | By: {req['requested_by']}")
-                                    if table == "members":
-                                        m_info = db.supabase.table("members").select("*").eq("member_id",
-                                                                                             target_row_id).execute()
-                                        m_data = m_info.data[0] if m_info.data else {}
-                                        f_info = db.fetch_single_family(m_data.get("family_id", 0)) if m_data else {}
-                                        st.error(f"⚠️ **Target Member for Removal:** **{m_data.get('name', 'N/A')}**")
-                                        st.markdown(
-                                            f"🏠 *Household Unit:* **{f_info.get('head_of_family', 'N/A')}** | *Illam:* {f_info.get('illam_name', 'N/A')}")
-                                    else:
-                                        f_data = db.fetch_single_family(target_row_id)
-                                        st.error(
-                                            f"⚠️ **Target Household Unit for Complete Deletion:** **{f_data.get('head_of_family', 'N/A')}**")
-                                        st.write(f"🏠 *Address Block Line:* {f_data.get('address', 'N/A')}")
+                        if table == "members":
+                            # Pull comprehensive structural profile metrics
+                            m_info = db.supabase.table("members").select("*").eq("member_id", target_row_id).execute()
+                            m_data = m_info.data[0] if m_info.data else {}
+                            f_info = db.fetch_single_family(m_data.get("family_id", 0)) if m_data else {}
+
+                            st.error(f"⚠️ **CRITICAL REMOVAL REQUEST: Profile Targeted for Permanent Deletion**")
+
+                            # Core Context Identification Card Header
+                            st.markdown(f"### 👤 {m_data.get('name', 'N/A')}")
+
+                            # Structural Two-Column Grid for Deep Administrative Review
+                            md_c1, md_c2 = st.columns(2)
+                            with md_c1:
+                                st.markdown(f"🏡 **Parent Household Unit:** {f_info.get('head_of_family', 'N/A')}")
+                                st.markdown(f"🛕 **Ancestral Illam Name:** {f_info.get('illam_name', 'N/A')}")
+                                st.markdown(f"🌿 **Relationship Framework:** `{m_data.get('relation', 'N/A')}`")
+                                st.markdown(f"📅 **Date of Birth (DOB):** {m_data.get('dob', 'N/A')}")
+
+                                # Securely flag if they are an eligible statutory voter
+                                try:
+                                    dob_year = datetime.datetime.strptime(str(m_data.get('dob')), "%Y-%m-%d").year
+                                    current_year = datetime.datetime.now().year
+                                    is_voter = "✅ Voting Eligible (18+)" if (
+                                                                                        current_year - dob_year) >= 18 else "🧒 Minor / Non-Voter"
+                                    st.markdown(f"🗳️ **Electoral Registry Status:** {is_voter}")
+                                except:
+                                    st.markdown(f"🗳️ **Electoral Registry Status:** Check DOB Format")
+
+                            with md_c2:
+                                st.markdown(
+                                    f"📞 **Primary Phone Number:** {m_data.get('phone', '*(No Number Linked)*')}")
+                                st.markdown(
+                                    f"📧 **Personal Email Link:** {m_data.get('email', '*(No Email Configured)*')}")
+                                st.markdown(
+                                    f"🩸 **Emergency Blood Group:** `{m_data.get('blood_group', 'Not Identified')}`")
+                                st.markdown(
+                                    f"🎓 **Educational Attainment:** {m_data.get('qualification', 'Unspecified')}")
+                                st.markdown(f"💼 **Active Job / Occupation:** {m_data.get('job', 'Unspecified')}")
+
+                            st.write("---")
+                            # Full-width sensitive data tracking metrics
+                            adhaar_val = str(m_data.get('adhaar', ''))
+                            masked_adhaar = f"🔒 Validated (XXXX-XXXX-{adhaar_val[-4:]})" if len(
+                                adhaar_val) >= 12 else "❌ Missing Aadhaar Record"
+
+                            st.markdown(f"🆔 **National Aadhaar Index:** {masked_adhaar}")
+                            st.markdown(
+                                f"📍 **Current Base Address:** {m_data.get('current_address', 'Using Master Family Address Line')}")
+
+                        else:
+                            # Household Unit Master Header Deletion Handling
+                            f_data = db.fetch_single_family(target_row_id)
+                            st.error(
+                                f"🚨 **FATAL REMOVAL REQUEST: Complete Household & All Relational Rosters Face Deletion!**")
+                            st.markdown(
+                                f"### 🏠 Household Head: {f_data.get('head_of_family', 'N/A')} (Illam: {f_data.get('illam_name', 'N/A')})")
+                            st.write(f"📍 **Permanent Master Address Line:** {f_data.get('address', 'N/A')}")
+                            st.caption(
+                                "⚠️ Warning: Approving this operational statement will instantly drop this primary house header along with every single bound member inside its structural directory tracking lists.")
 
                         # Action Buttons for checked items in this tab
                         del_selected = [x for x in st.session_state.sel_req_ids if x in del_ids]
