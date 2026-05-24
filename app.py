@@ -698,27 +698,28 @@ else:
                 # Each member profile gets their own independent isolated form container
                 with st.form(key=f"user_member_form_standalone_{m_id}"):
                     st.markdown(f"#### 👤 {m['name']} ({m['relation'] or 'Member'})")
+
+                    # Create the layout split columns
                     c1, c2 = st.columns(2)
                     with c1:
                         m_name = st.text_input("Name *", value=m.get('name', ''))
-                        m_rel = st.text_input("Relation *", value=m.get('relation', ''))
                         try:
-                            parsed_dob = datetime.datetime.strptime(str(m.get('dob', '1990-01-01')),
-                                                                            "%Y-%m-%d").date()
+                            parsed_dob = datetime.datetime.strptime(str(m.get('dob', '1990-01-01')), "%Y-%m-%d").date()
                         except:
                             parsed_dob = datetime.date(1990, 1, 1)
-                            m_dob = st.date_input("DOB *", value=parsed_dob)
-                            m_bg = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS,
-                                                    index=auth.BLOOD_GROUPS.index(m['blood_group']) if m.get(
-                                                        'blood_group') in auth.BLOOD_GROUPS else 0)
-                    with c2:
-                        m_phone = st.text_input("Phone Number",
-                                                        value=str(m.get('phone', '')) if m.get('phone') else '')
-                        m_email = st.text_input("Email", value=m.get('email', '') or '')
+                        final_dob = st.date_input("DOB *", value=parsed_dob)
+                        m_phone = st.text_input("Phone Number", value=str(m.get('phone', '')) if m.get('phone') else '')
                         m_qual = st.text_input("Qualification", value=m.get('qualification', '') or '')
+                    with c2:
+                        m_rel = st.text_input("Relation *", value=m.get('relation', ''))
+                        m_bg = st.selectbox("Blood Group", options=auth.BLOOD_GROUPS,
+                                            index=auth.BLOOD_GROUPS.index(m['blood_group']) if m.get(
+                                                'blood_group') in auth.BLOOD_GROUPS else 0)
+                        m_email = st.text_input("Email", value=m.get('email', '') or '')
                         m_job = st.text_input("Job / Occupation", value=m.get('job', '') or '')
 
                     st.write("---")
+                    # Aadhaar and addresses stay down here across the full width...
                     m_adhaar = st.text_input("Aadhaar Number",
                                                      value=str(m.get('adhaar', '')) if m.get('adhaar') else '')
                     is_same_initial = (m.get('current_address', '').strip() == header_address or m.get(
