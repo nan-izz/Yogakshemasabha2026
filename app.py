@@ -219,8 +219,18 @@ elif st.session_state.is_admin:
                              "⚙️ Admin Settings"])
 
         # ---- ADMIN TAB 1: BUCKETED BATCH WORKSPACE OVERHAUL (FIXED BUTTON STATE BINDING) ----
+        # ---- ADMIN TAB 1: BUCKETED BATCH WORKSPACE OVERHAUL ----
         with admin_tab[0]:
             st.header("Administrative Operations Dashboard")
+
+            # --- FIXED: PULL PARAMETERS DIRECTLY FROM DATABASE CONFIG ---
+            admin_cfg = db.fetch_admin_config()
+
+            # Change the strings inside the brackets below to match your exact Supabase column names:
+            db_base_fee = admin_cfg["base_family_fee"]
+            db_threshold = admin_cfg["base_member_threshold"]
+            db_add_fee = admin_cfg["additional_member_fee"]
+            # -----------------------------------------------------------
 
             # --- PHASE A: BANK PAYMENTS VERIFICATION CHANNEL ---
             st.subheader("💳 Staged Subscription Confirmations")
@@ -837,8 +847,7 @@ else:
                                 db.submit_pending_approval("members", "UPDATE", st.session_state.auth_email, {
                                             "name": m_name.strip(),
                                             "relation": m_rel.strip(),
-                                            "dob": m_dob.strftime("%Y-%m-%d"),
-                                            "blood_group": None if m_bg == 'Not Identified' else m_bg,
+                                            "dob": final_dob.strftime("%Y-%m-%d"),                                            "blood_group": None if m_bg == 'Not Identified' else m_bg,
                                             "phone": clean_phone,
                                             "email": clean_email,
                                             "qualification": clean_qual,
