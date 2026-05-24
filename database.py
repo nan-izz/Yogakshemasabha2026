@@ -270,3 +270,83 @@ def verify_supabase_otp(email, token):
     except Exception as e:
         print(f"OTP Cryptographic Verification Engine Failure: {str(e)}")
         return False
+
+
+def process_batch_approval_actions(approval_ids, action_type):
+    """
+    Executes structural commit transitions on a collection of staged IDs at once.
+    """
+    try:
+        for app_id in approval_ids:
+            # Query the structural data payload for the targeted item
+            req_lookup = supabase.table("pending_approvals").select("*").eq("approval_id", app_id).execute()
+            if not req_lookup.data: continue
+
+            req = req_lookup.data[0]
+            table = req["target_table"]
+            action = req["action_type"]
+            payload = req["change_payload"] or {}
+            target_id = req["target_id"]
+            family_email = req.get("requested_by")
+
+            if action_type == "APPROVE":
+                # Route and execute the payload structural statements
+                if table == "families" and action == "INSERT":
+                    fam_res = supabase.table("families").insert(
+                        {"head_of_family": payload.get("head_of_family"), "illam_name": payload.get("illam_name"),
+                         "gothram": payload.get("gothram"), "address": payload.get("address"),
+                         "email_id": payload.get("email_id")}).execute()
+                    if fam_res.data:
+                        supabase.table("members").insert(
+                            {"family_id": fam_res.data[0]["family_id"], "name": payload.get("head_of_family"),
+                             "relation": "Head of Family", "dob": payload.get("head_dob"),
+                             "phone": payload.get("head_phone"), "current_address": payload.get("address")}).execute()
+                elif table == "members" and action == "INSERT":
+                    supabase.table("members").insert(payload).execute()
+                elif action == "UPDATE":
+                    if table == "families":
+                        supabase.table("families").update(payload).eq("family_id", target_id).execute()
+                    elif table == "members":
+                        supabase.table("members").update(payload).eq("member_id", target_id).execute()
+                elif action == "DELETE":
+                    if table == "members":
+                        supabase.table("members").delete().eq("member_id", target_id).execute()
+                    elif table == "families":
+                        supabase.table("members").delete().eq("family_id", target_id).execute()
+                        supabase.table("families").delete().eq("family_id", target_id).execute()
+
+                if family_email:
+                    supabase.table("families").update({
+                                                          "admin_notification": f"✅ Your recent request to {action.lower()} records inside '{table}' was APPROVED by the committee."}).eq(
+                        "email_id", family_email).execute()
+
+            else:  # REJECT ACTION
+                if family_email:
+                    supabase.table("families").update({
+                                                          "admin_notification": f"❌ Your recent request to {action.lower()} records inside '{table}' was REJECTED by the managing committee."}).eq(
+                        "email_id", family_email).execute()
+
+            # Remove processing token out of operational database registry
+            supabase.table("pending_approvals").delete().eq("approval_id", app_id).execute()
+
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"Batch Execution Failure: {str(e)}")
+        raise e
+
+
+def process_batch_payments(family_ids, action_type):
+    """
+    Updates the verification lifecycle state for a batch of verified transaction IDs.
+    """
+    try:
+        status_target = "Approved" if action_type == "APPROVE" else "Pending Update"
+        for fam_id in family_ids:
+            supabase.table("families").update({"verification_status": status_target, "updated_at": "now()"}).eq(
+                "family_id", fam_id).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"Batch Payment Processing Failure: {str(e)}")
+        raise e

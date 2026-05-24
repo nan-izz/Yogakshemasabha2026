@@ -218,159 +218,218 @@ elif st.session_state.is_admin:
         admin_tab = st.tabs(["📋 Pending Approvals Queue", "🔍 Global Directory Matrix", "🎂 Age Verification Filter",
                              "⚙️ Admin Settings"])
 
-        # ---- ADMIN TAB 1: TABLE-BASED AUDIT PIPELINE QUEUE ----
+        # ---- ADMIN TAB 1: BUCKETED BATCH WORKSPACE OVERHAUL ----
         with admin_tab[0]:
-            st.header("Modifications Awaiting Administrative Clearance")
+            st.header("Administrative Operations Dashboard")
+
+            # --- PHASE A: BANK PAYMENTS VERIFICATION CHANNEL ---
             st.subheader("💳 Staged Subscription Confirmations")
-
-            admin_cfg = db.fetch_admin_config()
-            db_base_fee = admin_cfg.get("base_family_fee", 700)
-            db_threshold = admin_cfg.get("base_member_threshold", 4)
-            db_add_fee = admin_cfg.get("additional_member_fee", 100)
-
             all_households = db.fetch_all_families_global()
             payment_requests = [x for x in all_households if x.get("verification_status") == "Payment Submitted"]
 
-            for p_req in payment_requests:
-                f_m_records = db.fetch_family_members(p_req['family_id'])
-                adm_h_count = len(f_m_records) if f_m_records else 1
-                adm_expected_fee = int(db_base_fee) if adm_h_count <= int(db_threshold) else int(db_base_fee) + (
-                            (adm_h_count - int(db_threshold)) * int(db_add_fee))
+            if not payment_requests:
+                st.info("No pending payment confirmations to review.")
+            else:
+                # Track selection lists in session memory to prevent page refreshes from clearing boxes
+                if "sel_pay_ids" not in st.session_state: st.session_state.sel_pay_ids = []
 
-                with st.container(border=True):
-                    st.write(f"🏡 **{p_req['head_of_family']}** | Dues Expected: **₹{adm_expected_fee}**")
-                    st.markdown(
-                        f"<div style='background-color:#f1f3f5; padding:8px; border-radius:6px; font-size:14px; display:inline-block;'>👥 Roster Breakdown: <b>{adm_h_count} members</b></div>",
-                        unsafe_allow_html=True)
-                    st.write(f"Reference Code: `{p_req['payment_reference']}`")
-                    c_p1, c_p2 = st.columns(2)
-                    with c_p1:
-                        if st.button("✅ Verify Payment", key=f"pay_app_{p_req['family_id']}"):
-                            db.update_family_verification_state(p_req['family_id'], "Approved")
+                col_ctrl_p1, col_ctrl_p2 = st.columns(2)
+                with col_ctrl_p1:
+                    if st.button("🔘 Select All Payments", key="btn_all_pay", use_container_width=True):
+                        st.session_state.sel_pay_ids = [p['family_id'] for p in payment_requests]
+                with col_ctrl_p2:
+                    if st.button("⚪ Deselect All Payments", key="btn_clear_pay", use_container_width=True):
+                        st.session_state.sel_pay_ids = []
+
+                # Draw payment rows
+                for p_req in payment_requests:
+                    f_m_records = db.fetch_family_members(p_req['family_id'])
+                    adm_h_count = len(f_m_records) if f_m_records else 1
+                    adm_expected_fee = int(db_base_fee) if adm_h_count <= int(db_threshold) else int(db_base_fee) + (
+                                (adm_h_count - int(db_threshold)) * int(db_add_fee))
+
+                    is_pay_checked = p_req['family_id'] in st.session_state.sel_pay_ids
+
+                    with st.container(border=True):
+                        cc1, cc2 = st.columns([1, 20])
+                        with cc1:
+                            pay_box = st.checkbox("", value=is_pay_checked, key=f"paybox_item_{p_req['family_id']}")
+                            if pay_box and p_req['family_id'] not in st.session_state.sel_pay_ids:
+                                st.session_state.sel_pay_ids.append(p_req['family_id'])
+                            elif not pay_box and p_req['family_id'] in st.session_state.sel_pay_ids:
+                                st.session_state.sel_pay_ids.remove(p_req['family_id'])
+                        with cc2:
+                            st.write(
+                                f"🏡 **Household Unit:** {p_req['head_of_family']} | **Illam:** {p_req['illam_name']} | Expected: **₹{adm_expected_fee}** (Members count: {adm_h_count})")
+                            st.write(f"Reference Code Number: `{p_req['payment_reference']}`")
+
+                # Payment action controls
+                if st.session_state.sel_pay_ids:
+                    st.write("")
+                    col_pact1, col_pact2 = st.columns(2)
+                    with col_pact1:
+                        if st.button(f"✅ Bulk Verify & Approve {len(st.session_state.sel_pay_ids)} Payments",
+                                     type="primary", use_container_width=True):
+                            db.process_batch_payments(st.session_state.sel_pay_ids, "APPROVE")
+                            st.session_state.sel_pay_ids = []
                             st.rerun()
-                    with c_p2:
-                        if st.button("❌ Reject Payment Log", key=f"pay_rej_{p_req['family_id']}"):
-                            db.update_family_verification_state(p_req['family_id'], "Pending Update")
+                    with col_pact2:
+                        if st.button(f"❌ Bulk Decline & Reject {len(st.session_state.sel_pay_ids)} Payments",
+                                     use_container_width=True):
+                            db.process_batch_payments(st.session_state.sel_pay_ids, "REJECT")
+                            st.session_state.sel_pay_ids = []
                             st.rerun()
 
             st.write("---")
+
+            # --- PHASE B: DATA QUEUES DIVIDED BY CATEGORY BUCKETS ---
             st.subheader("📝 Pending Profile Core Alterations")
             pending_data = db.fetch_pending_approvals()
 
-            # User-friendly column name translation dictionary
             FIELD_MAP = {
-            "head_of_family": "Household Head Name",
-            "illam_name": "Illam Name",
-            "gothram": "Gothram",
-            "address": "Master Address",
-            "name": "Member Name",
-            "relation": "Relationship to Head",
-            "dob": "Date of Birth",
-            "blood_group": "Blood Group",
-            "phone": "Phone Number",
-            "email": "Email Address",
-            "qualification": "Educational Qualification",
-            "job": "Occupation / Job",
-            "adhaar": "Aadhaar Number",
-            "current_address": "Current Residential Address"
+                "head_of_family": "Household Head Name", "illam_name": "Illam Name", "gothram": "Gothram",
+                "address": "Master Address", "name": "Member Name", "relation": "Relationship to Head",
+                "dob": "Date of Birth", "blood_group": "Blood Group", "phone": "Phone Number",
+                "email": "Email Address", "qualification": "Educational Qualification", "job": "Occupation / Job",
+                "adhaar": "Aadhaar Number", "current_address": "Current Residential Address"
             }
+            hidden_keys = ["family_id", "member_id", "id", "updated_at", "created_at", "verification_status"]
 
-            for req in pending_data:
-                req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], req["action_type"], \
-                req["change_payload"] or {}, req["target_id"]
+            if not pending_data:
+                st.info("No profile alterations in queue.")
+            else:
+                # Group data elements into buckets based on action types
+                insert_bucket = [x for x in pending_data if x["action_type"] == "INSERT"]
+                update_bucket = [x for x in pending_data if x["action_type"] == "UPDATE"]
+                delete_bucket = [x for x in pending_data if x["action_type"] == "DELETE"]
 
-                # Filter out system primary/foreign keys that basic users don't see
-                hidden_keys = ["family_id", "member_id", "id", "updated_at", "created_at", "verification_status"]
-                display_payload = {FIELD_MAP.get(k, k): v for k, v in payload.items() if
-                               k not in hidden_keys and v is not None}
+                # Create organized sub-tabs for each operation bucket
+                bucket_tabs = st.tabs([f"✨ New Onboarding Registrations ({len(insert_bucket)})",
+                                       f"🔄 Structural Updates ({len(update_bucket)})",
+                                       f"🗑️ Removal Requests ({len(delete_bucket)})"])
 
-                with st.container(border=True):
-                    st.markdown(f"#### ✉️ Request #{req_id}: **{action}** on **{table.upper()}**")
-                    st.caption(f"Submitted by: {req['requested_by']}")
+                # Initialize selection states in session memory
+                if "sel_req_ids" not in st.session_state: st.session_state.sel_req_ids = []
 
-                # 🟢 SCENARIO 1: NEW ENTRY (INSERT)
-                    if action == "INSERT":
-                        st.info("✨ **Action Type: New Profile Registration Request**")
-                        st.markdown("**Below is the full data that will be added to the registry:**")
-
-                        # Display data cleanly in a two-column structural grid
-                        idx_c1, idx_c2 = st.columns(2)
-                        for i, (k, v) in enumerate(display_payload.items()):
-                            with idx_c1 if i % 2 == 0 else idx_c2:
-                                st.markdown(f"🔹 **{k}:** {v}")
-
-                    # 🔴 SCENARIO 2: REMOVAL OPERATION (DELETE)
-                    elif action == "DELETE":
-                        st.error("🗑️ **Action Type: Profile Deletion Request**")
-                        st.markdown("**The following registered entity profile is targeted for permanent removal:**")
-
-                        # Grab context identifiers safely based on targeted table mapping
-                        entity_title = payload.get("name") or payload.get("head_of_family") or f"ID #{target_row_id}"
-                        st.markdown(
-                        f"⚠️ **Target Entity:** <span style='font-size:16px; font-weight:700; color:#ff4b4b;'>{entity_title}</span>",
-                        unsafe_allow_html=True)
-                        if "relation" in payload:
-                            st.markdown(f"🔹 *Relationship Alignment:* {payload['relation']}")
-
-                    # 🟡 SCENARIO 3: MODIFICATION DELTA (UPDATE)
-                    elif action == "UPDATE":
-                        st.warning("🔄 **Action Type: Profile Modification Request**")
-                        st.markdown("**Changes requested inside this record:**")
-
-                        #Fetch the original master record from the database to compare differences
-                        if table == "families":
-                            current_master = db.fetch_single_family(target_row_id)
-                            context_name = f"Household: {current_master.get('head_of_family')} | ഇല്ലം: {current_master.get('illam_name')}"
+                for b_idx, active_bucket in enumerate([insert_bucket, update_bucket, delete_bucket]):
+                    with bucket_tabs[b_idx]:
+                        if not active_bucket:
+                            st.info("No processing entries inside this operational category bucket.")
                         else:
-                            # Pull individual member context info
-                            m_lookup = db.supabase.table("members").select("*").eq("member_id", target_row_id).execute()
-                            current_master = m_lookup.data[0] if m_lookup.data else {}
-                            context_name = f"Member Profile: **{current_master.get('name', 'Unknown')}** ({current_master.get('relation', 'Member')})"
+                            bucket_ids = [x['approval_id'] for x in active_bucket]
 
-                        st.markdown(f"📍 **Target Profile Context:** {context_name}")
-                        st.write("")
+                            col_bctrl1, col_bctrl2 = st.columns(2)
+                            with col_bctrl1:
+                                if st.button("🔘 Select All in Bucket", key=f"all_b_{b_idx}", use_container_width=True):
+                                    st.session_state.sel_req_ids = list(set(st.session_state.sel_req_ids + bucket_ids))
+                            with col_bctrl2:
+                                if st.button("⚪ Deselect All in Bucket", key=f"clear_b_{b_idx}",
+                                             use_container_width=True):
+                                    st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                    x not in bucket_ids]
 
-                        # Build a dynamic comparison checklist matrix table layout
-                        comp_rows = []
-                        for raw_key, new_val in payload.items():
-                            if raw_key in hidden_keys: continue
+                            # Display items inside the active bucket
+                            for req in active_bucket:
+                                req_id, table, action, payload, target_row_id = req["approval_id"], req["target_table"], \
+                                req["action_type"], req["change_payload"] or {}, req["target_id"]
+                                is_req_checked = req_id in st.session_state.sel_req_ids
 
-                            old_val = current_master.get(raw_key, "N/A")
-                            # Normalize comparisons to avoid blank space string mismatches
-                            if str(old_val).strip() == "" or old_val is None: old_val = "*(Empty / Unconfigured)*"
-                            if str(new_val).strip() == "" or new_val is None: new_val = "*(Set to Blank / Clear)*"
+                                with st.container(border=True):
+                                    bc1, bc2 = st.columns([1, 20])
+                                    with bc1:
+                                        req_box = st.checkbox("", value=is_req_checked, key=f"reqbox_item_{req_id}")
+                                        if req_box and req_id not in st.session_state.sel_req_ids:
+                                            st.session_state.sel_req_ids.append(req_id)
+                                        elif not req_box and req_id in st.session_state.sel_req_ids:
+                                            st.session_state.sel_req_ids.remove(req_id)
+                                    with bc2:
+                                        st.markdown(
+                                            f"##### Request #{req_id} ({table.upper()}) | Submitted by: {req['requested_by']}")
 
-                            if str(old_val) != str(new_val):
-                                friendly_key = FIELD_MAP.get(raw_key, raw_key)
-                                comp_rows.append({
-                                "Modified Property Field": friendly_key,
-                                "🔴 Current Value on Live Server": str(old_val),
-                                "🟢 New Proposed Value Overwrite": str(new_val)
-                                })
+                                        # BUCKET SCENARIO 1: NEW ENTRY (INSERT)
+                                        if action == "INSERT":
+                                            display_payload = {FIELD_MAP.get(k, k): v for k, v in payload.items() if
+                                                               k not in hidden_keys and v is not None}
+                                            idx_c1, idx_c2 = st.columns(2)
+                                            for i, (k, v) in enumerate(display_payload.items()):
+                                                with idx_c1 if i % 2 == 0 else idx_c2:
+                                                    st.markdown(f"🔹 **{k}:** {v}")
 
-                        if comp_rows:
-                            st.table(pd.DataFrame(comp_rows))
-                        else:
-                            st.info(
-                            "ℹ️ No textual property differences discovered. (User submitted layout form without overwriting entries)")
+                                        # BUCKET SCENARIO 2: REMOVAL OPERATION (DELETE)
+                                        elif action == "DELETE":
+                                            # REQUIREMENT FIX: Query full profile details out of active table before display
+                                            if table == "members":
+                                                m_info = db.supabase.table("members").select("*").eq("member_id",
+                                                                                                     target_row_id).execute()
+                                                m_data = m_info.data[0] if m_info.data else {}
 
-                    st.write("")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("👍 Approve Change", key=f"appr_{req_id}"):
-                            db.process_approval_action(req_id, action, table, payload, target_row_id)
-                            if table == "members" and target_row_id:
-                                m_look = db.supabase.table("members").select("family_id").eq("member_id",
-                                                                                         target_row_id).execute()
-                                if m_look.data: db.update_family_verification_state(m_look.data[0]["family_id"],
-                                                                                "Pending Update")
-                            st.success("Changes approved successfully!")
-                            st.rerun()
-                    with c2:
-                        if st.button("👎 Reject Change", key=f"rej_{req_id}"):
-                            db.reject_pending_approval(req_id)
-                            st.rerun()
+                                                f_info = db.fetch_single_family(
+                                                    m_data.get("family_id", 0)) if m_data else {}
 
+                                                st.error(
+                                                    f"⚠️ **Target Member Targeted for Permanent Removal:** **{m_data.get('name', 'N/A')}**")
+                                                st.markdown(
+                                                    f"🏠 *Belongs to Household Unit:* **{f_info.get('head_of_family', 'N/A')}** | Traditional Ancestral Illam: *{f_info.get('illam_name', 'N/A')}*")
+                                                st.write(
+                                                    f"🔹 **Relationship Context:** {m_data.get('relation', 'N/A')} | **DOB:** {m_data.get('dob', 'N/A')} | **Phone:** {m_data.get('phone', 'N/A')}")
+                                            else:
+                                                f_data = db.fetch_single_family(target_row_id)
+                                                st.error(
+                                                    f"⚠️ **Target Household Unit Targeted for Complete Deletion:** **{f_data.get('head_of_family', 'N/A')}**")
+                                                st.write(
+                                                    f"🏠 *Address Block Line:* {f_data.get('address', 'N/A')} | *Illam:* {f_data.get('illam_name', 'N/A')}")
+
+                                        # BUCKET SCENARIO 3: MODIFICATION DELTA (UPDATE)
+                                        elif action == "UPDATE":
+                                            if table == "families":
+                                                current_master = db.fetch_single_family(target_row_id)
+                                                context_name = f"Household Profile Header: **{current_master.get('head_of_family')}** (Illam Name: {current_master.get('illam_name')})"
+                                            else:
+                                                m_lookup = db.supabase.table("members").select("*").eq("member_id",
+                                                                                                       target_row_id).execute()
+                                                current_master = m_lookup.data[0] if m_lookup.data else {}
+                                                context_name = f"Member Profile Record: **{current_master.get('name', 'Unknown')}** ({current_master.get('relation', 'Member')})"
+
+                                            st.markdown(f"📍 **Target Profile:** {context_name}")
+
+                                            comp_rows = []
+                                            for raw_key, new_val in payload.items():
+                                                if raw_key in hidden_keys: continue
+                                                old_val = current_master.get(raw_key, "N/A")
+
+                                                check_old = "" if old_val is None or str(old_val).strip() == "" or str(
+                                                    old_val).lower() == "none" else str(old_val).strip()
+                                                check_new = "" if new_val is None or str(new_val).strip() == "" or str(
+                                                    new_val).lower() == "none" else str(new_val).strip()
+
+                                                if check_old != check_new:
+                                                    comp_rows.append({
+                                                        "Property Field": FIELD_MAP.get(raw_key, raw_key),
+                                                        "🔴 Live Current Value": "*(Empty)*" if check_old == "" else check_old,
+                                                        "🟢 Proposed Value": "*(Blank)*" if check_new == "" else check_new
+                                                    })
+                                            if comp_rows: st.table(pd.DataFrame(comp_rows))
+
+                            # Global operations control bar for checked items in this bucket
+                            bucket_selected_ids = [x for x in st.session_state.sel_req_ids if x in bucket_ids]
+                            if bucket_selected_ids:
+                                st.write("")
+                                col_bact1, col_bact2 = st.columns(2)
+                                with col_bact1:
+                                    if st.button(f"👍 Approve Checked ({len(bucket_selected_ids)}) Requests",
+                                                 key=f"b_app_btn_{b_idx}", type="primary", use_container_width=True):
+                                        db.process_batch_approval_actions(bucket_selected_ids, "APPROVE")
+                                        st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                        x not in bucket_selected_ids]
+                                        st.rerun()
+                                Zion_col_bact2 = col_bact2
+                                with Zion_col_bact2:
+                                    if st.button(f"👎 Reject Checked ({len(bucket_selected_ids)}) Requests",
+                                                 key=f"b_rej_btn_{b_idx}", use_container_width=True):
+                                        db.process_batch_approval_actions(bucket_selected_ids, "REJECT")
+                                        st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
+                                                                        x not in bucket_selected_ids]
+                                        st.rerun()
         # ---- ADMIN TAB 2: GLOBAL DIRECTORY SEARCH MATRIX (EDITABLE TARGET VIEWS RESTORED) ----
         with admin_tab[1]:
             st.header("Global Directory Master Tracking View")
