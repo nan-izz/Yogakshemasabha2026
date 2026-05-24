@@ -268,7 +268,8 @@ elif st.session_state.is_admin:
                         cc1, cc2 = st.columns([1, 20])
                         with cc1:
                             # Dynamic value interlock logic binds state straight to render value
-                            pay_box = st.checkbox("", value=is_pay_checked, key=f"paybox_live_state_{f_id_item}")
+                            pay_box = st.checkbox("", value=is_pay_checked,
+                                                  key=f"paybox_live_state_{f_id_item}_{str(is_pay_checked)}")
                             if pay_box and f_id_item not in st.session_state.sel_pay_ids:
                                 st.session_state.sel_pay_ids.append(f_id_item)
                             elif not pay_box and f_id_item in st.session_state.sel_pay_ids:
@@ -358,7 +359,8 @@ elif st.session_state.is_admin:
                             with st.container(border=True):
                                 bc1, bc2 = st.columns([1, 20])
                                 with bc1:
-                                    r_box = st.checkbox("", value=is_checked, key=f"reqbox_ins_tab_{req_id}")
+                                    r_box = st.checkbox("", value=is_checked,
+                                                        key=f"reqbox_ins_tab_{req_id}_{str(is_checked)}")
                                     if r_box and req_id not in st.session_state.sel_req_ids:
                                         st.session_state.sel_req_ids.append(req_id)
                                     elif not r_box and req_id in st.session_state.sel_req_ids:
@@ -418,7 +420,8 @@ elif st.session_state.is_admin:
                             with st.container(border=True):
                                 bc1, bc2 = st.columns([1, 20])
                                 with bc1:
-                                    r_box = st.checkbox("", value=is_checked, key=f"reqbox_upd_tab_{req_id}")
+                                    r_box = st.checkbox("", value=is_checked,
+                                                        key=f"reqbox_upd_tab_{req_id}_{str(is_checked)}")
                                     if r_box and req_id not in st.session_state.sel_req_ids:
                                         st.session_state.sel_req_ids.append(req_id)
                                     elif not r_box and req_id in st.session_state.sel_req_ids:
@@ -499,7 +502,8 @@ elif st.session_state.is_admin:
                             with st.container(border=True):
                                 bc1, bc2 = st.columns([1, 20])
                                 with bc1:
-                                    r_box = st.checkbox("", value=is_checked, key=f"reqbox_del_tab_{req_id}")
+                                    r_box = st.checkbox("", value=is_checked,
+                                                        key=f"reqbox_del_tab_{req_id}_{str(is_checked)}")
                                     if r_box and req_id not in st.session_state.sel_req_ids:
                                         st.session_state.sel_req_ids.append(req_id)
                                     elif not r_box and req_id in st.session_state.sel_req_ids:
