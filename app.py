@@ -436,18 +436,24 @@ elif st.session_state.is_admin:
                                     if bucket_selected_ids:
                                         st.write("")
                                         col_bact1, col_bact2 = st.columns(2)
+
+                                        # Assign names dynamically to create completely unique key strings
+                                        bucket_name_key = "insert" if b_idx == 0 else "update" if b_idx == 1 else "delete"
+
                                         with col_bact1:
-                                            # FIXED: Removed the invalid 'type_container_width' typo argument completely
+                                            # FIXED: key now resolves to uniquely structured strings like 'b_app_btn_final_insert'
                                             if st.button(f"👍 Approve Checked ({len(bucket_selected_ids)}) Requests",
-                                                         key=f"b_app_btn_final_{b_idx}", type="primary",
+                                                         key=f"b_app_btn_final_{bucket_name_key}", type="primary",
                                                          use_container_width=True):
                                                 db.process_batch_approval_actions(bucket_selected_ids, "APPROVE")
                                                 st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids
                                                                                 if x not in bucket_selected_ids]
                                                 st.rerun()
                                         with col_bact2:
+                                            # FIXED: key now resolves to uniquely structured strings like 'b_rej_btn_final_insert'
                                             if st.button(f"👎 Reject Checked ({len(bucket_selected_ids)}) Requests",
-                                                         key=f"b_rej_btn_final_{b_idx}", use_container_width=True):
+                                                         key=f"b_rej_btn_final_{bucket_name_key}",
+                                                         use_container_width=True):
                                                 db.process_batch_approval_actions(bucket_selected_ids, "REJECT")
                                                 st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids
                                                                                 if x not in bucket_selected_ids]
