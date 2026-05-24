@@ -218,7 +218,6 @@ elif st.session_state.is_admin:
         admin_tab = st.tabs(["📋 Pending Approvals Queue", "🔍 Global Directory Matrix", "🎂 Age Verification Filter",
                              "⚙️ Admin Settings"])
 
-        # ---- ADMIN TAB 1: BUCKETED BATCH WORKSPACE OVERHAUL (FIXED BUTTON STATE BINDING) ----
         # ---- ADMIN TAB 1: BUCKETED BATCH WORKSPACE OVERHAUL ----
         with admin_tab[0]:
             st.header("Administrative Operations Dashboard")
@@ -432,27 +431,27 @@ elif st.session_state.is_admin:
                                                     })
                                             if comp_rows: st.table(pd.DataFrame(comp_rows))
 
-                            # Global operations control bar for checked items in this bucket
-                            bucket_selected_ids = [x for x in st.session_state.sel_req_ids if x in bucket_ids]
-                            if bucket_selected_ids:
-                                st.write("")
-                                col_bact1, col_bact2 = st.columns(2)
-                                with col_bact1:
-                                    if st.button(f"👍 Approve Checked ({len(bucket_selected_ids)}) Requests",
-                                                 key=f"b_app_btn_final_{b_idx}", type="primary",
-                                                 type_container_width=True if "type_container_width" in dir() else False,
-                                                 use_container_width=True):
-                                        db.process_batch_approval_actions(bucket_selected_ids, "APPROVE")
-                                        st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
-                                                                        x not in bucket_selected_ids]
-                                        st.rerun()
-                                with col_bact2:
-                                    if st.button(f"👎 Reject Checked ({len(bucket_selected_ids)}) Requests",
-                                                 key=f"b_rej_btn_final_{b_idx}", use_container_width=True):
-                                        db.process_batch_approval_actions(bucket_selected_ids, "REJECT")
-                                        st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids if
-                                                                        x not in bucket_selected_ids]
-                                        st.rerun()
+                                    # Global operations control bar for checked items in this bucket
+                                    bucket_selected_ids = [x for x in st.session_state.sel_req_ids if x in bucket_ids]
+                                    if bucket_selected_ids:
+                                        st.write("")
+                                        col_bact1, col_bact2 = st.columns(2)
+                                        with col_bact1:
+                                            # FIXED: Removed the invalid 'type_container_width' typo argument completely
+                                            if st.button(f"👍 Approve Checked ({len(bucket_selected_ids)}) Requests",
+                                                         key=f"b_app_btn_final_{b_idx}", type="primary",
+                                                         use_container_width=True):
+                                                db.process_batch_approval_actions(bucket_selected_ids, "APPROVE")
+                                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids
+                                                                                if x not in bucket_selected_ids]
+                                                st.rerun()
+                                        with col_bact2:
+                                            if st.button(f"👎 Reject Checked ({len(bucket_selected_ids)}) Requests",
+                                                         key=f"b_rej_btn_final_{b_idx}", use_container_width=True):
+                                                db.process_batch_approval_actions(bucket_selected_ids, "REJECT")
+                                                st.session_state.sel_req_ids = [x for x in st.session_state.sel_req_ids
+                                                                                if x not in bucket_selected_ids]
+                                                st.rerun()
         # ---- ADMIN TAB 2: GLOBAL DIRECTORY SEARCH MATRIX (EDITABLE TARGET VIEWS RESTORED) ----
         with admin_tab[1]:
             st.header("Global Directory Master Tracking View")
